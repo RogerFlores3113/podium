@@ -1,9 +1,11 @@
+import logging
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.ingestion import generate_embeddings
 
+logger = logging.getLogger(__name__)
 
 async def retrieve_relevant_chunks(
     db: AsyncSession,
@@ -21,6 +23,7 @@ async def retrieve_relevant_chunks(
     # Embed the query
     embeddings = await generate_embeddings([query])
     query_embedding = embeddings[0]
+
 
     # pgvector cosine distance: <=> operator
     # Similarity = 1 - distance
@@ -40,4 +43,8 @@ async def retrieve_relevant_chunks(
     )
 
     rows = result.fetchall()
+
+    # log
+    logger.info(f"Retrieved {len(rows)} chunks for query (top similarity: {rows[0].similarity:.3f})")
+
     return [{"content": row.content, "similarity": row.similarity} for row in rows]

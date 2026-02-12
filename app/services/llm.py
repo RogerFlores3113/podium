@@ -1,3 +1,4 @@
+import logging
 from litellm import acompletion
 
 from app.config import settings
@@ -7,6 +8,7 @@ SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's pers
 Use the provided context to answer the user's question accurately.
 If the context doesn't contain relevant information, say so honestly — don't make things up.
 When referencing information from the context, be specific about what you found."""
+logger = logging.getLogger(__name__)
 
 
 async def generate_response(

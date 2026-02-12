@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 
 import pymupdf
 from litellm import aembedding
@@ -11,6 +12,7 @@ from app.models import Document, Chunk
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+logger = logging.getLogger(__name__)
 
 
 def extract_text_from_pdf(file_path: str) -> tuple[str, int]:
@@ -91,6 +93,9 @@ async def ingest_document(
 
     # 3. Chunk
     chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
+
+    # Log
+    logger.info(f"Ingesting document: {filename} ({page_count} pages, {len(chunks)} chunks)")
 
     # 4. Embed (in batches to avoid API limits)
     batch_size = 100  # OpenAI allows up to 2048, but be conservative
