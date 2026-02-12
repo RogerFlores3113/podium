@@ -6,6 +6,8 @@ from sqlalchemy import text
 from app.database import engine, Base
 from app.routers import documents
 
+from app.routers import documents, chat
+
 
 
 @asynccontextmanager
@@ -19,8 +21,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Assistant Platform", version="0.1.0", lifespan=lifespan)
 
-# After the app = FastAPI(...) line:
+# Add routers
 app.include_router(documents.router)
+app.include_router(chat.router)
 
 @app.get("/health")
 async def health():
