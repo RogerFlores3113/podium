@@ -16,13 +16,27 @@ class Document(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    user_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    filename: Mapped[str] = mapped_column(String(500), nullable=False)
-    storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+    user_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )
+
+    filename: Mapped[str] = mapped_column(
+        String(500), nullable=False
+    )
+
+    storage_path: Mapped[str] = mapped_column(
+        String(1000), nullable=False
+    )
+
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="processing"
     )
-    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    page_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
@@ -36,12 +50,23 @@ class Chunk(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
     )
-    user_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    user_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )
+
+    chunk_index: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )
+
     embedding: Mapped[list[float]] = mapped_column(
         Vector(settings.embedding_dimensions), nullable=False
     )
@@ -65,8 +90,15 @@ class Conversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    user_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    user_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )
+
+    title: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
@@ -80,12 +112,23 @@ class Message(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE")
     )
-    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" or "assistant"
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+    user_id: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "user" or "assistant"
+
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
