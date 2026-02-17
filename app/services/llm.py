@@ -8,6 +8,10 @@ from app.config import settings
 from app.models import Message
 from app.services.tokens import count_tokens
 
+from collections.abc import AsyncGenerator
+
+from litellm import acompletion
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's personal knowledge base.
@@ -103,3 +107,39 @@ async def generate_response(
     )
 
     return response.choices[0].message.content
+
+async def generate_response_stream(
+    query: str,
+    context_chunks: list[dict],
+    conversation_history: list[dict] | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Same as generate_response, but yields tokens as they arrive.
+
+    The caller is responsible for collecting the full text if needed
+    (e.g., to save to the database).
+    """
+    context = build_context_string(context_chunks, settings.context_max_tokens)
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    if conversation_history:
+        messages.extend(conversation_history)
+
+    messages.append({
+        "role": "user",
+        "content": f"Context from your knowledge base:\n\n{context}\n\n---\n\nQuestion: {query}",
+    })
+
+    response = await acompletion(
+        model=settings.chat_model,
+        messages=messages,
+        api_key=settings.openai_api_key,
+        max_tokens=1000,
+        stream=True,  # This is the only difference
+    )
+
+    async for chunk in response:
+        content = chunk.choices[0].delta.content
+        if content:
+            yield content
