@@ -10,6 +10,7 @@ from app.models import Conversation, Message
 from app.schemas import ChatRequest, ChatResponse, ConversationResponse
 from app.services.retrieval import retrieve_relevant_chunks
 from app.services.llm import generate_response, build_conversation_history
+from app.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -51,6 +52,7 @@ async def chat(
         content=request.message,
     )
     db.add(user_message)
+    await db.flush()
 
     # Retrieve relevant chunks
     chunks = await retrieve_relevant_chunks(db, request.message, DEFAULT_USER_ID)

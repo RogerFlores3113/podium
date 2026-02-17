@@ -19,12 +19,13 @@ class Settings(BaseSettings):
     # Chat model
     chat_model: str = "gpt-4o-mini"
 
-    # Tell Pydantic to load .env as the env file. replaces load_dotenv()
-    model_config = {"env_file": ".env"}
-
     # Memory config
     memory_max_tokens: int = 2000        # Max tokens for conversation history
     context_max_tokens: int = 3000       # Max tokens for retrieved chunks
+    
+    # Tell Pydantic to load .env as the env file. replaces load_dotenv()
+    model_config = {"env_file": ".env"}
+
 
 
 settings = Settings()
