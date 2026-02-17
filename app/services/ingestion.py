@@ -122,3 +122,63 @@ async def ingest_document(
     await db.commit()
     await db.refresh(doc)
     return doc
+
+
+async def ingest_document_background(
+    db: AsyncSession,
+    document_id: str,
+    file_path: str,
+    filename: str,
+    user_id: str,
+) -> None:
+    """
+    Background version of ingestion. The Document row already exists
+    with status='processing'. This function does the heavy lifting.
+    """
+    from app.models import Document
+    from sqlalchemy import select
+
+    # Fetch the existing document record
+    result = await db.execute(
+        select(Document).where(Document.id == uuid.UUID(document_id))
+    )
+    doc = result.scalar_one()
+
+    # Extract text
+    text, page_count = extract_text_from_pdf(file_path)
+    doc.page_count = page_count
+
+    if not text:
+        doc.status = "empty"
+        await db.commit()
+        return
+
+    # Chunk
+    chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
+    logger.info(
+        f"Ingesting document: {filename} ({page_count} pages, {len(chunks)} chunks)"
+    )
+
+    # Embed in batches
+    batch_size = 100
+    all_embeddings = []
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i : i + batch_size]
+        embeddings = await generate_embeddings(batch)
+        all_embeddings.extend(embeddings)
+
+    # Store chunks
+    for idx, (chunk_text_content, embedding) in enumerate(
+        zip(chunks, all_embeddings)
+    ):
+        chunk = Chunk(
+            document_id=doc.id,
+            user_id=user_id,
+            content=chunk_text_content,
+            chunk_index=idx,
+            embedding=embedding,
+        )
+        db.add(chunk)
+
+    doc.status = "ready"
+    await db.commit()
