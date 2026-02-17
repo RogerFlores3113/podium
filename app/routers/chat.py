@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models import Conversation, Message
 from app.schemas import ChatRequest, ChatResponse, ConversationResponse
 from app.services.retrieval import retrieve_relevant_chunks
-from app.services.llm import generate_response
+from app.services.llm import generate_response, build_conversation_history
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -55,8 +55,15 @@ async def chat(
     # Retrieve relevant chunks
     chunks = await retrieve_relevant_chunks(db, request.message, DEFAULT_USER_ID)
 
+    # Build conversation history (skip for brand new conversations)
+    history = []
+    if request.conversation_id:
+        history = await build_conversation_history(
+            db, conversation.id, settings.memory_max_tokens
+        )
+
     # Generate response
-    response_text = await generate_response(request.message, chunks)
+    response_text = await generate_response(request.message, chunks, history)
 
     # Store assistant message
     assistant_message = Message(
