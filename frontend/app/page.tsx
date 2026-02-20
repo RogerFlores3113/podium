@@ -31,56 +31,70 @@ export default function Home() {
     // Add an empty assistant message that we'll stream into
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-    try {
-      const response = await fetch("http://localhost:8000/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userMessage,
-          conversation_id: conversationId,
-        }),
-      });
+try {
+  const response = await fetch("http://localhost:8000/chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: userMessage,
+      conversation_id: conversationId,
+    }),
+  });
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  if (!reader) throw new Error("No reader available");
 
-      if (!reader) throw new Error("No reader available");
+  let buffer = "";
 
-      let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    buffer += decoder.decode(value, { stream: true });
 
-        buffer += decoder.decode(value, { stream: true });
+    // Split on \r\n\r\n (the actual delimiter from sse-starlette)
+    const parts = buffer.split("\r\n\r\n");
+    buffer = parts.pop() || "";
 
-        // Parse SSE events from buffer
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const lines = part.split("\r\n");
+      let eventType = "";
+      let eventData = "";
 
-        let currentEvent = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7);
-          } else if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6));
-
-            if (currentEvent === "token") {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last.role === "assistant") {
-                  last.content += data.token;
-                }
-                return updated;
-              });
-            } else if (currentEvent === "done") {
-              setConversationId(data.conversation_id);
-            }
-          }
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          eventData = line.slice(6);
         }
       }
-    } catch (error) {
+
+      if (!eventData) continue;
+
+      const data = JSON.parse(eventData);
+
+      if (eventType === "token") {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === "assistant") {
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + data.token,
+            };
+          }
+          return updated;
+        });
+      } else if (eventType === "done") {
+        setConversationId(data.conversation_id);
+      }
+    }
+  }
+}
+    
+    catch (error) {
       console.error("Chat error:", error);
       setMessages((prev) => {
         const updated = [...prev];
