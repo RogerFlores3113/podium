@@ -211,9 +211,18 @@ __marimo__/
 
 # Uploads
 uploads/
+*.pdf
+
 
 # Alembic
 alembic/__pycache__/
 alembic/versions/__pycache__/
 
-*.pdf
+
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/terraform.tfvars
+infra/.terraform.lock.html
