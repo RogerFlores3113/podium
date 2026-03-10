@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,7 +33,7 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
 try {
-  const response = await fetch("http://localhost:8000/chat/stream", {
+  const response = await fetch(`${API_URL}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -119,7 +120,7 @@ try {
     formData.append("file", file);
 
     try {
-      const response = await fetch("http://localhost:8000/documents/upload", {
+      const response = await fetch(`${API_URL}/documents/upload`, {
         method: "POST",
         body: formData,
       });
@@ -131,7 +132,7 @@ try {
 
       // Poll for completion
       const pollInterval = setInterval(async () => {
-        const statusRes = await fetch(`http://localhost:8000/documents/${doc.id}`);
+        const statusRes = await fetch(`${API_URL}/documents/${doc.id}`);
         const statusDoc = await statusRes.json();
 
         if (statusDoc.status === "ready") {
