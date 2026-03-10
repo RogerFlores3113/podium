@@ -36,7 +36,8 @@ app = FastAPI(title="AI Assistant Platform", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",       
+        "http://localhost:3000",  
+        "https://podium-beta.vercel.app/", # ADD ANY OTHER URLS HERE IF "FAILED TO GET A RESPONSE: IS THE BACKEND RUNNING?"    
     ],
     allow_credentials=True,
     allow_methods=["*"],
