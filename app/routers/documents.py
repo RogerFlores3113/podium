@@ -12,6 +12,8 @@ from app.database import get_db
 from app.models import Document
 from app.schemas import DocumentResponse
 from app.services.ingestion import UPLOAD_DIR
+from app.services.storage import save_file
+
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -27,18 +29,19 @@ async def upload_document(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    # Save file locally
+    # Save file
     file_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.pdf")
+    file_key = f"{DEFAULT_USER_ID}/{file_id}.pdf"
     content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    storage_path = save_file(content, file_key)
+
+    
 
     # Create document record immediately
     doc = Document(
         user_id=DEFAULT_USER_ID,
         filename=file.filename,
-        storage_path=file_path,
+        storage_path=storage_path,
         status="processing",
     )
     db.add(doc)

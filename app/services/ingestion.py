@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Document, Chunk
+from app.services.storage import get_local_path
 
 
 UPLOAD_DIR = "uploads"
@@ -144,14 +145,16 @@ async def ingest_document_background(
     )
     doc = result.scalar_one()
 
-    # Extract text
-    text, page_count = extract_text_from_pdf(file_path)
-    doc.page_count = page_count
 
-    if not text:
-        doc.status = "empty"
-        await db.commit()
-        return
+    # Extract text — need a local file for pymupdf
+    local_path = get_local_path(file_path)
+    try:
+        text, page_count = extract_text_from_pdf(local_path)
+    finally:
+        # Clean up temp file if it was downloaded from S3
+        import os
+        if local_path != file_path and os.path.exists(local_path):
+            os.remove(local_path)
 
     # Chunk
     chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)

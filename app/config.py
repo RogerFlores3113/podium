@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Tell Pydantic to load .env as the env file. replaces load_dotenv()
     model_config = {"env_file": ".env"}
 
+    # S3 — empty means use local filesystem (dev mode)
+    s3_bucket_name: str = ""
+    aws_default_region: str = "us-east-1"
+
 
 
 settings = Settings()
