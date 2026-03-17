@@ -4,9 +4,10 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { proxy: string[] } }
+  { params }: { params: Promise<{ proxy: string[] }> }
 ) {
-  const path = params.proxy.join("/");
+  const { proxy } = await params;
+  const path = proxy.join("/");
   const contentType = request.headers.get("content-type") || "";
 
   const body = contentType.includes("multipart")
@@ -27,9 +28,10 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { proxy: string[] } }
+  { params }: { params: Promise<{ proxy: string[] }> }
 ) {
-  const path = params.proxy.join("/");
+  const { proxy } = await params;
+  const path = proxy.join("/");
 
   const response = await fetch(`${BACKEND_URL}/${path}`, {
     method: "GET",
