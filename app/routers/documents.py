@@ -55,7 +55,7 @@ async def upload_document(
     await redis_pool.enqueue_job(
         "process_document",
         str(doc.id),
-        file_path,
+        file_key,
         file.filename,
         DEFAULT_USER_ID,
     )
