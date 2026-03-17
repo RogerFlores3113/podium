@@ -156,6 +156,8 @@ async def ingest_document_background(
         if local_path != file_path and os.path.exists(local_path):
             os.remove(local_path)
 
+    doc.page_count = page_count
+
     # Chunk
     chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     logger.info(

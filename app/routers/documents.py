@@ -11,7 +11,6 @@ from app.config import settings
 from app.database import get_db
 from app.models import Document
 from app.schemas import DocumentResponse
-from app.services.ingestion import UPLOAD_DIR
 from app.services.storage import save_file
 
 
