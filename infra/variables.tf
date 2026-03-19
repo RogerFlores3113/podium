@@ -32,3 +32,9 @@ variable "domain_name" {
   type        = string
   default     = ""
 }
+
+variable "aws_email" {
+  description = "Email for AWS"
+  type        = string
+  default     = ""
+}
