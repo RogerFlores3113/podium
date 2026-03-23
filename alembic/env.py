@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import Base 
 
 # Import all models so Alembic can see them
-from app.models import Document, Chunk, Conversation, Message  # noqa: F401
+from app.models import Document, Chunk, Conversation, Message, User, ApiKey  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
