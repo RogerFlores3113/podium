@@ -33,6 +33,18 @@ class Settings(BaseSettings):
     s3_bucket_name: str = ""
     aws_default_region: str = "us-east-1"
 
+    # Auth (Clerk)
+    clerk_secret_key: str = ""
+    clerk_jwks_url: str = ""
+    
+    # KMS
+    kms_key_id: str = ""
+
+    # Rate limiting 
+    rate_limit_chart: str = "30/minute"
+    rate_limit_chart: str = "5/minute"
+    rate_limit_read: str = "60/minute"
+
 
 
 settings = Settings()

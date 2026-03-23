@@ -18,14 +18,16 @@ from app.services.llm import (
 )
 from app.config import settings
 
+from app.auth import get_current_user_id 
+
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-DEFAULT_USER_ID = "user_01"
 
 
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -44,7 +46,7 @@ async def chat(
             raise HTTPException(status_code=404, detail="Conversation not found")
     else:
         conversation = Conversation(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             title=request.message[:100],  # Use first 100 chars as title
         )
         db.add(conversation)
@@ -53,7 +55,7 @@ async def chat(
     # Store user message
     user_message = Message(
         conversation_id=conversation.id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user_id,
         role="user",
         content=request.message,
     )
@@ -61,7 +63,7 @@ async def chat(
     await db.flush()
 
     # Retrieve relevant chunks
-    chunks = await retrieve_relevant_chunks(db, request.message, DEFAULT_USER_ID)
+    chunks = await retrieve_relevant_chunks(db, request.message, user_id)
 
     # Build conversation history (skip for brand new conversations)
     history = []
@@ -76,7 +78,7 @@ async def chat(
     # Store assistant message
     assistant_message = Message(
         conversation_id=conversation.id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user_id,
         role="assistant",
         content=response_text,
     )
@@ -94,13 +96,17 @@ async def chat(
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve a conversation with all messages."""
     result = await db.execute(
         select(Conversation)
         .options(selectinload(Conversation.messages))
-        .where(Conversation.id == conversation_id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user_id,
+            )
     )
     conversation = result.scalar_one_or_none()
     if not conversation:
@@ -111,6 +117,7 @@ async def get_conversation(
 @router.post("/stream")
 async def chat_stream(
     request: ChatRequest,
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -131,7 +138,7 @@ async def chat_stream(
             raise HTTPException(status_code=404, detail="Conversation not found")
     else:
         conversation = Conversation(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             title=request.message[:100],
         )
         db.add(conversation)
@@ -140,7 +147,7 @@ async def chat_stream(
     # Store user message
     user_message = Message(
         conversation_id=conversation.id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user_id,
         role="user",
         content=request.message,
     )
@@ -148,7 +155,7 @@ async def chat_stream(
     await db.flush()
 
     # Retrieve relevant chunks
-    chunks = await retrieve_relevant_chunks(db, request.message, DEFAULT_USER_ID)
+    chunks = await retrieve_relevant_chunks(db, request.message, user_id)
 
     # Build conversation history
     history = []
@@ -178,7 +185,7 @@ async def chat_stream(
         # Save the complete response to DB
         assistant_message = Message(
             conversation_id=conversation.id,
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             role="assistant",
             content=full_response,
         )

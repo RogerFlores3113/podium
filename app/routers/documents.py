@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.auth import get_current_user_id
 from app.models import Document
 from app.schemas import DocumentResponse
 from app.services.storage import save_file
@@ -16,12 +17,12 @@ from app.services.storage import save_file
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-DEFAULT_USER_ID = "user_01"
 
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a PDF document for background ingestion."""
@@ -30,7 +31,7 @@ async def upload_document(
 
     # Save file
     file_id = str(uuid.uuid4())
-    file_key = f"{DEFAULT_USER_ID}/{file_id}.pdf"
+    file_key = f"{user_id}/{file_id}.pdf"
     content = await file.read()
     storage_path = save_file(content, file_key)
 
@@ -38,7 +39,7 @@ async def upload_document(
 
     # Create document record immediately
     doc = Document(
-        user_id=DEFAULT_USER_ID,
+        user_id=user_id,
         filename=file.filename,
         storage_path=storage_path,
         status="processing",
@@ -56,7 +57,7 @@ async def upload_document(
         str(doc.id),
         file_key,
         file.filename,
-        DEFAULT_USER_ID,
+        user_id,
     )
     await redis_pool.close()
 
@@ -64,11 +65,14 @@ async def upload_document(
 
 
 @router.get("/", response_model=list[DocumentResponse])
-async def list_documents(db: AsyncSession = Depends(get_db)):
+async def list_documents(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """List all uploaded documents."""
     result = await db.execute(
         select(Document)
-        .where(Document.user_id == DEFAULT_USER_ID)
+        .where(Document.user_id == user_id)
         .order_by(Document.created_at.desc())
     )
     return result.scalars().all()
@@ -77,12 +81,17 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single document's status. Useful for polling after upload."""
     result = await db.execute(
-        select(Document).where(Document.id == document_id)
+        select(Document).where(
+            Document.id == document_id,
+            Document.user_id == user_id, # Enforce ownership
+        )
     )
+
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
