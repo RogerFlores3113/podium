@@ -15,6 +15,7 @@ from app.services.llm import (
     generate_response,
     generate_response_stream,
     build_conversation_history,
+    get_user_api_key,
 )
 from app.config import settings
 
@@ -72,8 +73,13 @@ async def chat(
             db, conversation.id, settings.memory_max_tokens
         )
 
+    # get user api key
+    user_api_key = await get_user_api_key(db, user_id, "openai")
+
     # Generate response
-    response_text = await generate_response(request.message, chunks, history)
+    response_text = await generate_response(
+        request.message, chunks, history, api_key=user_api_key
+    )
 
     # Store assistant message
     assistant_message = Message(
@@ -164,6 +170,9 @@ async def chat_stream(
             db, conversation.id, settings.memory_max_tokens
         )
 
+    # get user api key
+    user_api_key = await get_user_api_key(db, user_id, "openai")
+
     async def event_generator():
         # Send sources first so the frontend can display them
         yield {
@@ -174,7 +183,7 @@ async def chat_stream(
         # Stream the response
         full_response = ""
         async for token in generate_response_stream(
-            request.message, chunks, history
+            request.message, chunks, history, api_key=user_api_key
         ):
             full_response += token
             yield {

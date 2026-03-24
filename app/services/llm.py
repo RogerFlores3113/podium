@@ -5,8 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Message
+from app.models import Message, User, ApiKey
 from app.services.tokens import count_tokens
+from app.services.encryption import (
+    decrypt_api_key,
+    get_cached_key, 
+    set_cached_key,
+)
 
 from collections.abc import AsyncGenerator
 
@@ -82,6 +87,7 @@ async def generate_response(
     query: str,
     context_chunks: list[dict],
     conversation_history: list[dict] | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Build a prompt with context + history and send to the LLM."""
 
@@ -102,7 +108,7 @@ async def generate_response(
     response = await acompletion(
         model=settings.chat_model,
         messages=messages,
-        api_key=settings.openai_api_key,
+        api_key=resolve_api_key(api_key),
         max_tokens=1000,
     )
 
@@ -112,6 +118,7 @@ async def generate_response_stream(
     query: str,
     context_chunks: list[dict],
     conversation_history: list[dict] | None = None,
+    api_key: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Same as generate_response, but yields tokens as they arrive.
@@ -134,7 +141,7 @@ async def generate_response_stream(
     response = await acompletion(
         model=settings.chat_model,
         messages=messages,
-        api_key=settings.openai_api_key,
+        api_key=resolve_api_key(api_key),
         max_tokens=1000,
         stream=True,  # This is the only difference
     )
@@ -143,3 +150,48 @@ async def generate_response_stream(
         content = chunk.choices[0].delta.content
         if content:
             yield content
+
+
+async def get_user_api_key(
+    db: AsyncSession,
+    clerk_id: str,
+    provider: str,
+) -> str | None:
+    """
+    Get the decrypted API key for a user and provider.
+
+    Uses an in-memory cache to avoid calling KMS on every request.
+    Falls back to the system key if the user hasn't provided one.
+    """
+    cache_key = f"{clerk_id}:{provider}"
+
+    # Check cache first
+    cached = get_cached_key(cache_key)
+    if cached:
+        return cached
+
+    # Fetch from DB
+    result = await db.execute(
+        select(ApiKey)
+        .join(User)
+        .where(
+            User.clerk_id == clerk_id,
+            ApiKey.provider == provider,
+            ApiKey.is_active == True,
+        )
+    )
+    api_key_record = result.scalar_one_or_none()
+
+    if not api_key_record:
+        return None  # No user key — caller should fall back to system key
+
+    # Decrypt and cache
+    decrypted = decrypt_api_key(api_key_record.encrypted_key)
+    set_cached_key(cache_key, decrypted)
+
+    return decrypted
+
+
+def resolve_api_key(user_key: str | None) -> str:
+    """Return the user's key if available, otherwise the system key."""
+    return user_key or settings.openai_api_key
