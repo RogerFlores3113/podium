@@ -1,3 +1,4 @@
+# Purely display. helps find keys and information after terraform apply. Can also run "terraform output OUTPUTNAME" in console.
 output "alb_dns_name" {
   description = "DNS name of the load balancer (your API URL)"
   value       = aws_lb.main.dns_name
@@ -16,4 +17,9 @@ output "s3_bucket_name" {
 output "rds_endpoint" {
   description = "RDS database endpoint"
   value       = aws_db_instance.main.endpoint
+}
+
+output "kms_key_id" {
+  description = "KMS key ID for encrypting user API keys"
+  value       = aws_kms_key.user_keys.key_id
 }

@@ -55,6 +55,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "REDIS_URL", value = local.redis_url },
         { name = "S3_BUCKET_NAME", value = aws_s3_bucket.uploads.id },
         { name = "AWS_DEFAULT_REGION", value = var.aws_region },
+        { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
       ]
 
       secrets = [
@@ -135,10 +136,11 @@ resource "aws_ecs_task_definition" "worker" {
         { name = "REDIS_URL", value = local.redis_url },
         { name = "S3_BUCKET_NAME", value = aws_s3_bucket.uploads.id },
         { name = "AWS_DEFAULT_REGION", value = var.aws_region },
+        { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
       ]
 
       secrets = [
-        {
+        {  
           name      = "OPENAI_API_KEY"
           valueFrom = aws_secretsmanager_secret.openai_api_key.arn
         }

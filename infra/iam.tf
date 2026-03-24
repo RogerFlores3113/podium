@@ -106,3 +106,22 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "ecs_task_kms" {
+  name = "${var.project_name}-ecs-kms"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt"
+        ]
+        Resource = [aws_kms_key.user_keys.arn]
+      }
+    ]
+  })
+}
