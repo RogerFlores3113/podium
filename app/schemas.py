@@ -45,3 +45,19 @@ class ConversationResponse(BaseModel):
     messages: list[MessageResponse]
 
     model_config = {"from_attributes": True}
+
+    # --- API Keys ---
+
+class ApiKeyCreate(BaseModel):
+    provider: str  # "openai", "anthropic", "ollama"
+    api_key: str   # The actual key — only sent on creation, never returned
+
+
+class ApiKeyResponse(BaseModel):
+    id: uuid.UUID
+    provider: str
+    key_hint: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
