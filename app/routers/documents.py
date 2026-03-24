@@ -3,10 +3,11 @@ import uuid
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.limiter import limiter
 from app.config import settings
 from app.database import get_db
 from app.auth import get_current_user_id
@@ -20,7 +21,9 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("/upload", response_model=DocumentResponse)
+@limiter.limit("5/minute")
 async def upload_document(
+    request_obj: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),

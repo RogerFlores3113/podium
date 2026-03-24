@@ -2,7 +2,7 @@ import uuid
 import json
 from sse_starlette.sse import EventSourceResponse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,15 +18,17 @@ from app.services.llm import (
     get_user_api_key,
 )
 from app.config import settings
+from app.limiter import limiter
 
 from app.auth import get_current_user_id 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-
 @router.post("/", response_model=ChatResponse)
+@limiter.limit("30/minute")
 async def chat(
+    request_obj: Request, # slowapi needs the raw Request
     request: ChatRequest,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),

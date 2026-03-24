@@ -3,7 +3,7 @@ import sys
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -13,6 +13,12 @@ from app.routers import documents, chat, keys
 from app.errors import global_exception_handler
 from sqlalchemy import text 
 from app.database import async_session
+from app.config import settings
+
+
+from app.limiter import limiter
+from slowapi.errors import RateLimitExceeded 
+from slowapi.middleware import SlowAPIMiddleware 
 
 
 
@@ -49,6 +55,8 @@ app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(keys.router)
 app.add_exception_handler(Exception, global_exception_handler)
+app.state.limiter = limiter 
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.get("/health")
@@ -62,3 +70,13 @@ async def health():
             status_code=503,
             content={"status": "unhealthy", "detail": str(e)},
         )
+    
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Rate limit exceeded. Please slow down.",
+            "retry_after": str(exc.detail),
+        }
+    )
