@@ -38,3 +38,14 @@ variable "aws_email" {
   type        = string
   default     = ""
 }
+
+variable "clerk_secret_key" {
+  description = "Clerk secret key"
+  type        = string
+  sensitive   = true
+}
+
+variable "clerk_jwks_url" {
+  description = "Clerk JWKS URL for JWT verification"
+  type        = string
+}
