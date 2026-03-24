@@ -23,7 +23,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.post("/upload", response_model=DocumentResponse)
 @limiter.limit("5/minute")
 async def upload_document(
-    request_obj: Request,
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
@@ -68,7 +68,9 @@ async def upload_document(
 
 
 @router.get("/", response_model=list[DocumentResponse])
+@limiter.limit("60/minute")
 async def list_documents(
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):

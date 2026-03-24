@@ -28,8 +28,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("/", response_model=ChatResponse)
 @limiter.limit("30/minute")
 async def chat(
-    request_obj: Request, # slowapi needs the raw Request
-    request: ChatRequest,
+    request: Request, # slowapi needs the raw Request
+    body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -40,9 +40,9 @@ async def chat(
     Otherwise, creates a new one.
     """
     # Get or create conversation
-    if request.conversation_id:
+    if body.conversation_id:
         result = await db.execute(
-            select(Conversation).where(Conversation.id == request.conversation_id)
+            select(Conversation).where(Conversation.id == body.conversation_id)
         )
         conversation = result.scalar_one_or_none()
         if not conversation:
@@ -50,7 +50,7 @@ async def chat(
     else:
         conversation = Conversation(
             user_id=user_id,
-            title=request.message[:100],  # Use first 100 chars as title
+            title=body.message[:100],  # Use first 100 chars as title
         )
         db.add(conversation)
         await db.flush()
@@ -60,17 +60,17 @@ async def chat(
         conversation_id=conversation.id,
         user_id=user_id,
         role="user",
-        content=request.message,
+        content=body.message,
     )
     db.add(user_message)
     await db.flush()
 
     # Retrieve relevant chunks
-    chunks = await retrieve_relevant_chunks(db, request.message, user_id)
+    chunks = await retrieve_relevant_chunks(db, body.message, user_id)
 
     # Build conversation history (skip for brand new conversations)
     history = []
-    if request.conversation_id:
+    if body.conversation_id:
         history = await build_conversation_history(
             db, conversation.id, settings.memory_max_tokens
         )
@@ -80,7 +80,7 @@ async def chat(
 
     # Generate response
     response_text = await generate_response(
-        request.message, chunks, history, api_key=user_api_key
+        body.message, chunks, history, api_key=user_api_key
     )
 
     # Store assistant message
