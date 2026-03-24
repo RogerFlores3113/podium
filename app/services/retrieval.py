@@ -45,6 +45,9 @@ async def retrieve_relevant_chunks(
     rows = result.fetchall()
 
     # log
-    logger.info(f"Retrieved {len(rows)} chunks for query (top similarity: {rows[0].similarity:.3f})")
+    if rows:
+        logger.info(f"Retrieved {len(rows)} chunks for query (top similarity: {rows[0].similarity:.3f})")
+    else:
+        logger.info("No chunks retrieved for query")
 
     return [{"content": row.content, "similarity": row.similarity} for row in rows]

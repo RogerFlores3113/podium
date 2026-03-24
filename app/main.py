@@ -44,7 +44,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  
-        "https://podium-beta.vercel.app", # ADD ANY OTHER URLS HERE IF "FAILED TO GET A RESPONSE: IS THE BACKEND RUNNING?"    
+        "https://podium-beta.vercel.app", # ADD ANY OTHER URLS HERE IF "FAILED TO GET A RESPONSE: IS THE BACKEND RUNNING?" 
+        "http://localhost:8000"   
     ],
     allow_credentials=True,
     allow_methods=["*"],
