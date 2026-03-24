@@ -9,10 +9,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.database import engine, Base
-from app.routers import documents, chat
+from app.routers import documents, chat, keys
 from app.errors import global_exception_handler
 from sqlalchemy import text 
 from app.database import async_session
+
 
 
 logging.basicConfig(
@@ -46,6 +47,7 @@ app.add_middleware(
 # Add routers
 app.include_router(documents.router)
 app.include_router(chat.router)
+app.include_router(keys.router)
 app.add_exception_handler(Exception, global_exception_handler)
 
 
