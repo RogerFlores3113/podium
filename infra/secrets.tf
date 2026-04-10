@@ -39,3 +39,31 @@ resource "aws_secretsmanager_secret_version" "clerk_secret_key" {
   secret_id     = aws_secretsmanager_secret.clerk_secret_key.id
   secret_string = var.clerk_secret_key
 }
+
+resource "aws_secretsmanager_secret" "tavily_api_key" {
+  name                    = "${var.project_name}/tavily-api-key"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "${var.project_name}-tavily-api-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "tavily_api_key" {
+  secret_id     = aws_secretsmanager_secret.tavily_api_key.id
+  secret_string = var.tavily_api_key
+}
+
+resource "aws_secretsmanager_secret" "e2b_api_key" {
+  name                    = "${var.project_name}/e2b-api-key"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "${var.project_name}-e2b-api-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "e2b_api_key" {
+  secret_id     = aws_secretsmanager_secret.e2b_api_key.id
+  secret_string = var.e2b_api_key
+}

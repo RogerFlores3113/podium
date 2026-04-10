@@ -49,3 +49,15 @@ variable "clerk_jwks_url" {
   description = "Clerk JWKS URL for JWT verification"
   type        = string
 }
+
+variable "tavily_api_key" {
+  description = "Tavily API key for web search"
+  type        = string
+  sensitive   = true
+}
+
+variable "e2b_api_key" {
+  description = "E2B API key for code interpreter sandboxes"
+  type        = string
+  sensitive   = true
+}

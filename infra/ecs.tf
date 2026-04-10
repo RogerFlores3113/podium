@@ -68,6 +68,14 @@ resource "aws_ecs_task_definition" "app" {
         {
           name      = "CLERK_SECRET_KEY"
           valueFrom = aws_secretsmanager_secret.clerk_secret_key.arn
+        },
+        {
+          name      = "TAVILY_API_KEY"
+          valueFrom = aws_secretsmanager_secret.tavily_api_key.arn
+        },
+        {
+          name      = "E2B_API_KEY"
+          valueFrom = aws_secretsmanager_secret.e2b_api_key.arn
         }
       ]
 
@@ -155,6 +163,14 @@ resource "aws_ecs_task_definition" "worker" {
         {
           name      = "CLERK_SECRET_KEY"
           valueFrom = aws_secretsmanager_secret.clerk_secret_key.arn
+        },
+        {
+          name      = "TAVILY_API_KEY"
+          valueFrom = aws_secretsmanager_secret.tavily_api_key.arn
+        },
+        {
+          name      = "E2B_API_KEY"
+          valueFrom = aws_secretsmanager_secret.e2b_api_key.arn
         }
       ]
 

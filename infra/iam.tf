@@ -59,6 +59,8 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
           aws_secretsmanager_secret.openai_api_key.arn,
           aws_secretsmanager_secret.db_password.arn,
           aws_secretsmanager_secret.clerk_secret_key.arn,
+          aws_secretsmanager_secret.tavily_api_key.arn,
+          aws_secretsmanager_secret.e2b_api_key.arn,
         ]
       }
     ]
