@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Index, LargeBinary
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config import settings
@@ -128,6 +128,16 @@ class Message(Base):
     content: Mapped[str] = mapped_column(
         Text, nullable=False
     )
+
+    tool_calls: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # Set on assistant messages that invoke
+
+    tool_call_ids: Mapped[str | None] = mapped_column(
+        String[100], nullable=True
+    )
+    # Set on "tool" role messages, Links a tool result back to the call that produced it. 
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
