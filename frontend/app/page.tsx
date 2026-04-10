@@ -4,9 +4,92 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth, UserButton } from "@clerk/nextjs";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+  result?: string;
+  error?: string;
+  status: "running" | "done" | "error";
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
+  toolCalls?: ToolCall[];
+}
+
+function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const icon = {
+    web_search: "🔍",
+    document_search: "📄",
+    python_executor: "🐍",
+  }[toolCall.name] || "🔧";
+
+  const statusColor = {
+    running: "text-yellow-600",
+    done: "text-green-600",
+    error: "text-red-600",
+  }[toolCall.status];
+
+  const statusText = {
+    running: "running...",
+    done: "done",
+    error: "error",
+  }[toolCall.status];
+
+  // Try to parse arguments for display
+  let argsDisplay = toolCall.arguments;
+  try {
+    const parsed = JSON.parse(toolCall.arguments);
+    argsDisplay = JSON.stringify(parsed, null, 2);
+  } catch {
+    // Keep as-is if not valid JSON yet (still streaming)
+  }
+
+  return (
+    <div className="border rounded-lg bg-gray-50 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-4 py-2 flex items-center justify-between hover:bg-gray-100 text-left"
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <span>{icon}</span>
+          <span className="font-mono">{toolCall.name}</span>
+          <span className={statusColor}>{statusText}</span>
+        </div>
+        <span className="text-gray-400 text-xs">{expanded ? "▼" : "▶"}</span>
+      </button>
+      {expanded && (
+        <div className="px-4 py-2 border-t text-xs space-y-2">
+          <div>
+            <div className="text-gray-500 mb-1">Arguments:</div>
+            <pre className="bg-white p-2 rounded border overflow-x-auto">
+              {argsDisplay}
+            </pre>
+          </div>
+          {toolCall.result && (
+            <div>
+              <div className="text-gray-500 mb-1">Result:</div>
+              <pre className="bg-white p-2 rounded border overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+                {toolCall.result}
+              </pre>
+            </div>
+          )}
+          {toolCall.error && (
+            <div>
+              <div className="text-red-500 mb-1">Error:</div>
+              <pre className="bg-red-50 p-2 rounded border border-red-200 overflow-x-auto">
+                {toolCall.error}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Home() {
@@ -77,13 +160,93 @@ try {
       let eventType = "";
       let eventData = "";
 
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          eventData = line.slice(6);
+      let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const data = JSON.parse(line.slice(6));
+
+            if (currentEvent === "token") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant") {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    content: last.content + data.token,
+                  };
+                }
+                return updated;
+              });
+            } else if (currentEvent === "tool_call_start") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant") {
+                  const newToolCall: ToolCall = {
+                    id: data.id,
+                    name: data.name,
+                    arguments: data.arguments,
+                    status: "running",
+                  };
+                  updated[updated.length - 1] = {
+                    ...last,
+                    toolCalls: [...(last.toolCalls || []), newToolCall],
+                  };
+                }
+                return updated;
+              });
+            } else if (currentEvent === "tool_call_result") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant" && last.toolCalls) {
+                  const updatedToolCalls = last.toolCalls.map((tc) =>
+                    tc.id === data.id
+                      ? { ...tc, result: data.result, status: "done" as const }
+                      : tc
+                  );
+                  updated[updated.length - 1] = {
+                    ...last,
+                    toolCalls: updatedToolCalls,
+                  };
+                }
+                return updated;
+              });
+              // Start a new assistant message for the next iteration's text
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "" },
+              ]);
+            } else if (currentEvent === "tool_call_error") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant" && last.toolCalls) {
+                  const updatedToolCalls = last.toolCalls.map((tc) =>
+                    tc.id === data.id
+                      ? { ...tc, error: data.error, status: "error" as const }
+                      : tc
+                  );
+                  updated[updated.length - 1] = {
+                    ...last,
+                    toolCalls: updatedToolCalls,
+                  };
+                }
+                return updated;
+              });
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "" },
+              ]);
+            } else if (currentEvent === "done") {
+              setConversationId(data.conversation_id);
+            } else if (currentEvent === "conversation") {
+              setConversationId(data.conversation_id);
+            }
+          }
         }
-      }
 
       if (!eventData) continue;
 
@@ -197,19 +360,34 @@ try {
           </div>
         )}
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-900"
-              }`}
-            >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
-            </div>
+          <div key={i}>
+            {/* Text content */}
+            {msg.content && (
+              <div
+                className={`flex ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                } mb-2`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-900"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tool calls */}
+            {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="space-y-2 my-2">
+                {msg.toolCalls.map((tc) => (
+                  <ToolCallDisplay key={tc.id} toolCall={tc} />
+                ))}
+              </div>
+            )}
           </div>
         ))}
         <div ref={messagesEndRef} />

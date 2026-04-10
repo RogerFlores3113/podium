@@ -61,7 +61,7 @@ class WebSearchTool(Tool):
             formatted.append(
                 f"{i}. {r['title']}\n"
                 f"   URL: {r['url']}\n"
-                f"   {r['content'][:500]}"  # Truncate to keep tokens reasonable
+                f"   {r['content'][:800]}"  # Truncate to keep tokens reasonable
             )
 
         return "\n\n".join(formatted)
