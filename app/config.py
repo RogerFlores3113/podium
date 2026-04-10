@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     rate_limit_chart: str = "5/minute"
     rate_limit_read: str = "60/minute"
 
+    # Agent / tools
+    tavily_api_key: str = ""
+    e2b_api_key: str = ""
+    agent_max_iterations: int = 10
+
 
 
 settings = Settings()
