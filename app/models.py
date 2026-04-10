@@ -134,7 +134,7 @@ class Message(Base):
     )
     # Set on assistant messages that invoke
 
-    tool_call_ids: Mapped[str | None] = mapped_column(
+    tool_call_id: Mapped[str | None] = mapped_column(
         String[100], nullable=True
     )
     # Set on "tool" role messages, Links a tool result back to the call that produced it. 
