@@ -1,3 +1,4 @@
+import json
 import logging
 
 from litellm import acompletion
@@ -33,8 +34,8 @@ async def build_conversation_history(
     """
     Fetch recent messages for a conversation, fitting within a token budget.
 
-    Works backward from newest to oldest, stopping when we'd exceed the budget.
-    This ensures the most recent context is always included.
+    Handles user, assistant (with or without tool calls), and tool messages.
+    Returns messages in OpenAI format, oldest first.
     """
     result = await db.execute(
         select(Message)
@@ -43,17 +44,40 @@ async def build_conversation_history(
     )
     messages = result.scalars().all()
 
-    history = []
+    history: list[dict] = []
     token_count = 0
 
     for msg in messages:
-        msg_tokens = count_tokens(msg.content)
+        # Rough token estimate — include tool_calls JSON if present
+        content_for_count = msg.content or ""
+        if msg.tool_calls:
+            content_for_count += json.dumps(msg.tool_calls)
+        msg_tokens = count_tokens(content_for_count)
+
         if token_count + msg_tokens > max_tokens:
             break
-        history.append({"role": msg.role, "content": msg.content})
+
+        # Reconstruct the message in OpenAI format
+        if msg.role == "tool":
+            history.append({
+                "role": "tool",
+                "tool_call_id": msg.tool_call_id or "",
+                "content": msg.content,
+            })
+        elif msg.role == "assistant" and msg.tool_calls:
+            history.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": msg.tool_calls,
+            })
+        else:
+            history.append({
+                "role": msg.role,
+                "content": msg.content,
+            })
+
         token_count += msg_tokens
 
-    # Reverse so oldest is first (we built the list newest-first)
     history.reverse()
 
     logger.info(
