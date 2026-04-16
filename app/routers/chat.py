@@ -19,11 +19,12 @@ from app.services.llm import (
     get_user_api_key,
 )
 from app.services.agent import run_agent
+from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
 
 from app.config import settings
 from app.limiter import limiter
 
-from app.auth import get_current_user_id 
+from app.auth import get_current_user_id
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -187,6 +188,12 @@ async def chat_stream(
     # Resolve user's API key (BYOK)
     user_api_key = await get_user_api_key(db, user_id, "openai")
 
+    # Load core memories for prompt injection
+    core_memories = await retrieve_core_memories(db, user_id)
+    core_memories_text = format_core_memories_for_prompt(core_memories)
+    if core_memories_text:
+        logger.info(f"Injecting {len(core_memories)} core memories into prompt")
+
     async def event_generator():
         # Send conversation ID early so the frontend can track it
         yield {
@@ -201,6 +208,7 @@ async def chat_stream(
                 user_message=request.message,
                 conversation_history=history,
                 api_key=user_api_key,
+                core_memories_text=core_memories_text,
             ):
                 event_type = agent_event["type"]
 
@@ -260,6 +268,19 @@ async def chat_stream(
                     await db.flush()
                 elif event_type == "done":
                     await db.commit()
+
+                    # Schedule memory extraction (debounced — later jobs supersede this one)
+                    try:
+                        redis_pool = request_obj.app.state.redis_pool
+                        await redis_pool.enqueue_job(
+                            "extract_memories_job",
+                            str(conversation.id),
+                            user_id,
+                            _defer_by=settings.memory_extraction_delay,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to schedule memory extraction: {e}")
+
                     yield {
                         "event": "done",
                         "data": json.dumps({

@@ -61,3 +61,27 @@ class ApiKeyResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Memories ---
+
+class MemoryResponse(BaseModel):
+    id: uuid.UUID
+    category: str
+    content: str
+    is_active: bool
+    edited_by_user: bool
+    created_at: datetime
+    updated_at: datetime
+    source_conversation_id: uuid.UUID | None
+
+    model_config = {"from_attributes": True}
+
+
+class MemoryCreate(BaseModel):
+    category: str  # "fact" | "preference" | "context"
+    content: str
+
+
+class MemoryUpdate(BaseModel):
+    content: str
