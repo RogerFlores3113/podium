@@ -42,7 +42,7 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Allow execution role to read secrets
+# Allow execution role to read SSM parameters
 resource "aws_iam_role_policy" "ecs_execution_secrets" {
   name = "${var.project_name}-ecs-secrets"
   role = aws_iam_role.ecs_execution.id
@@ -52,16 +52,19 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
     Statement = [
       {
         Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
+        Action = ["ssm:GetParameters"]
         Resource = [
-          aws_secretsmanager_secret.openai_api_key.arn,
-          aws_secretsmanager_secret.db_password.arn,
-          aws_secretsmanager_secret.clerk_secret_key.arn,
-          aws_secretsmanager_secret.tavily_api_key.arn,
-          aws_secretsmanager_secret.e2b_api_key.arn,
+          aws_ssm_parameter.openai_api_key.arn,
+          aws_ssm_parameter.db_password.arn,
+          aws_ssm_parameter.clerk_secret_key.arn,
+          aws_ssm_parameter.tavily_api_key.arn,
+          aws_ssm_parameter.e2b_api_key.arn,
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = ["*"]
       }
     ]
   })

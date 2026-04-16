@@ -57,25 +57,24 @@ resource "aws_ecs_task_definition" "app" {
         { name = "AWS_DEFAULT_REGION", value = var.aws_region },
         { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
         { name = "CLERK_JWKS_URL", value = var.clerk_jwks_url },
-        { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
       ]
 
       secrets = [
         {
           name      = "OPENAI_API_KEY"
-          valueFrom = aws_secretsmanager_secret.openai_api_key.arn
+          valueFrom = aws_ssm_parameter.openai_api_key.arn
         },
         {
           name      = "CLERK_SECRET_KEY"
-          valueFrom = aws_secretsmanager_secret.clerk_secret_key.arn
+          valueFrom = aws_ssm_parameter.clerk_secret_key.arn
         },
         {
           name      = "TAVILY_API_KEY"
-          valueFrom = aws_secretsmanager_secret.tavily_api_key.arn
+          valueFrom = aws_ssm_parameter.tavily_api_key.arn
         },
         {
           name      = "E2B_API_KEY"
-          valueFrom = aws_secretsmanager_secret.e2b_api_key.arn
+          valueFrom = aws_ssm_parameter.e2b_api_key.arn
         }
       ]
 
@@ -108,9 +107,9 @@ resource "aws_ecs_service" "app" {
   enable_execute_command = true
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   load_balancer {
@@ -152,25 +151,24 @@ resource "aws_ecs_task_definition" "worker" {
         { name = "AWS_DEFAULT_REGION", value = var.aws_region },
         { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
         { name = "CLERK_JWKS_URL", value = var.clerk_jwks_url },
-        { name = "KMS_KEY_ID", value = aws_kms_key.user_keys.key_id },
       ]
 
       secrets = [
-        {  
+        {
           name      = "OPENAI_API_KEY"
-          valueFrom = aws_secretsmanager_secret.openai_api_key.arn
+          valueFrom = aws_ssm_parameter.openai_api_key.arn
         },
         {
           name      = "CLERK_SECRET_KEY"
-          valueFrom = aws_secretsmanager_secret.clerk_secret_key.arn
+          valueFrom = aws_ssm_parameter.clerk_secret_key.arn
         },
         {
           name      = "TAVILY_API_KEY"
-          valueFrom = aws_secretsmanager_secret.tavily_api_key.arn
+          valueFrom = aws_ssm_parameter.tavily_api_key.arn
         },
         {
           name      = "E2B_API_KEY"
-          valueFrom = aws_secretsmanager_secret.e2b_api_key.arn
+          valueFrom = aws_ssm_parameter.e2b_api_key.arn
         }
       ]
 
@@ -194,9 +192,9 @@ resource "aws_ecs_service" "worker" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   force_new_deployment = true
