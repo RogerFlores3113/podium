@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     kms_key_id: str = ""
 
     # Rate limiting
+    rate_limit_chat: str = "30/minute"
     rate_limit_chat_stream: str = "5/minute"
     rate_limit_read: str = "60/minute"
 
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
     e2b_api_key: str = ""
     agent_max_iterations: int = 10
 
+    # Memory extraction
+    memory_extraction_model: str = "gpt-4o-mini"
+    memory_retrieval_top_k: int = 5
+    memory_core_always_inject: int = 10
+    memory_extraction_delay: int = 60
     model_config = {"env_file": ".env"}
 
 

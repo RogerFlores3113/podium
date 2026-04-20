@@ -38,3 +38,4 @@ def get_tool_schemas() -> list[dict]:
 from app.tools import web_search  # noqa: E402, F401
 from app.tools import document_search  # noqa: E402, F401
 from app.tools import python_executor  # noqa: E402, F401
+from app.tools import memory_search  # noqa: E402, F401

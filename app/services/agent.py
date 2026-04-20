@@ -19,12 +19,14 @@ You have the following tools available:
 - document_search: Search the user's personal document library.
 - web_search: Search the web for current information.
 - python_executor: Execute Python code for calculations, data analysis, or plotting.
+- memory_search: Search the user's past memories (things they've told you before).
 
 Guidelines:
 - Use document_search when the user asks about topics that might be in their uploaded documents.
 - Use web_search when the user asks about current events or facts that might have changed recently.
 - Use python_executor for calculations, data manipulation, or anything that benefits from code.
-- You can call multiple tools in sequence. For example: search the web, then use Python to analyze the results.
+- Use memory_search when you need to recall specific past interactions or context the user mentioned previously.
+- You can call multiple tools in sequence.
 - If you don't need any tools, just answer directly from your knowledge.
 - Be concise and specific. Cite sources when you use them.
 """
@@ -36,6 +38,7 @@ async def run_agent(
     user_message: str,
     conversation_history: list[dict],
     api_key: str | None = None,
+    core_memories_text: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Run the agent loop for a single user message.
@@ -65,9 +68,13 @@ async def run_agent(
         conversation_history: Prior messages in OpenAI format
         api_key: User's API key (from BYOK), None to use system default
     """
-    # Build the initial message list. System prompt first, then history,
-    # then the new user message.
-    messages: list[dict] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
+    # Build the initial message list. System prompt (+ injected memories) first,
+    # then history, then the new user message.
+    system_prompt = AGENT_SYSTEM_PROMPT
+    if core_memories_text:
+        system_prompt = f"{AGENT_SYSTEM_PROMPT}\n\n---\n\n{core_memories_text}"
+
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
 

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
-from app.database import engine, async_session
+from app.database import engine, async_session, memories
 from app.errors import global_exception_handler
 from app.limiter import limiter
 from app.routers import documents, chat, keys
@@ -26,9 +26,18 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create pgvector extension on startup
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    # Create shared Redis pool for memory extraction scheduling
+    from arq import create_pool
+    from arq.connections import RedisSettings
+    app.state.redis_pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+
     yield
+
+    await app.state.redis_pool.aclose()
 
 
 app = FastAPI(title="AI Assistant Platform", version="0.1.0", lifespan=lifespan)
@@ -48,6 +57,7 @@ app.add_middleware(
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(keys.router)
+app.include_router(memories.router)
 app.add_exception_handler(Exception, global_exception_handler)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
