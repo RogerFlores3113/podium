@@ -5,29 +5,26 @@ class Settings(BaseSettings):
     database_url: str
     openai_api_key: str
 
-    # Embedding config
+    # Embedding
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
 
-    # Chunking config
+    # Chunking
     chunk_size: int = 512
     chunk_overlap: int = 50
 
-    # Retrieval config
+    # Retrieval
     retrieval_top_k: int = 5
 
-    # Chat model
+    # Models
     chat_model: str = "gpt-4o-mini"
 
-    # Memory config
-    memory_max_tokens: int = 2000        # Max tokens for conversation history
-    context_max_tokens: int = 3000       # Max tokens for retrieved chunks
+    # Conversation history token budget
+    memory_max_tokens: int = 2000
+    context_max_tokens: int = 3000
 
     # Redis
     redis_url: str = "redis://localhost:6379"
-
-    # Tell Pydantic to load .env as the env file. replaces load_dotenv()
-    model_config = {"env_file": ".env"}
 
     # S3 — empty means use local filesystem (dev mode)
     s3_bucket_name: str = ""
@@ -36,7 +33,7 @@ class Settings(BaseSettings):
     # Auth (Clerk)
     clerk_secret_key: str = ""
     clerk_jwks_url: str = ""
-    
+
     # KMS
     kms_key_id: str = ""
 
@@ -55,6 +52,7 @@ class Settings(BaseSettings):
     memory_retrieval_top_k: int = 5
     memory_core_always_inject: int = 10
     memory_extraction_delay: int = 60
+    model_config = {"env_file": ".env"}
 
 
 settings = Settings()
