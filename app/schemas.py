@@ -21,6 +21,7 @@ class DocumentResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: uuid.UUID | None = None
+    model: str | None = None  # Override default chat_model for this request
 
 
 class ChatResponse(BaseModel):
