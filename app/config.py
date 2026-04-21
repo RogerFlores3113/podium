@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 # Models available for selection. Provider drives which BYOK key is used.
 AVAILABLE_MODELS: list[dict] = [
+    {"id": "gpt-5-nano", "label": "GPT-5 nano", "provider": "openai"},
     {"id": "gpt-4o-mini", "label": "GPT-4o mini", "provider": "openai"},
     {"id": "gpt-4o", "label": "GPT-4o", "provider": "openai"},
     {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku", "provider": "anthropic"},
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
 
     # Models
-    chat_model: str = "gpt-4o-mini"
+    chat_model: str = "gpt-5-nano"
 
     # Conversation history token budget
     memory_max_tokens: int = 2000
