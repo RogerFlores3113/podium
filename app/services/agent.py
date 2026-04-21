@@ -4,11 +4,15 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from litellm import acompletion
+from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, model_supports_tools
 from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
+
+# Models that use the OpenAI Responses API instead of Chat Completions.
+RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano"})
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,192 @@ Guidelines:
 - Be concise and specific. Cite sources when you use them.
 - When image_generation returns a URL, present the image to the user — do not just paste the raw URL.
 """
+
+
+def _to_responses_input(messages: list[dict]) -> list[dict]:
+    """Convert standard chat-completion messages to Responses API input format."""
+    result: list[dict] = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content") or ""
+        if role == "system":
+            result.append({"role": "developer", "content": [{"type": "input_text", "text": content}]})
+        elif role == "user":
+            result.append({"role": "user", "content": [{"type": "input_text", "text": content}]})
+        elif role == "assistant":
+            if msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    result.append({
+                        "type": "function_call",
+                        "call_id": tc["id"],
+                        "name": tc["function"]["name"],
+                        "arguments": tc["function"]["arguments"],
+                    })
+            if content:
+                result.append({"role": "assistant", "content": [{"type": "output_text", "text": content}]})
+        elif role == "tool":
+            result.append({
+                "type": "function_call_output",
+                "call_id": msg.get("tool_call_id", ""),
+                "output": content,
+            })
+    return result
+
+
+def _to_responses_tools(tool_schemas: list[dict]) -> list[dict]:
+    """Convert chat-completion tool schemas to Responses API format."""
+    return [
+        {
+            "type": "function",
+            "name": s["function"]["name"],
+            "description": s["function"]["description"],
+            "parameters": s["function"]["parameters"],
+        }
+        for s in tool_schemas
+        if s.get("type") == "function"
+    ]
+
+
+async def _run_responses_agent(
+    db: AsyncSession,
+    user_id: str,
+    input_messages: list[dict],
+    responses_tools: list[dict],
+    api_key: str,
+    model: str,
+) -> AsyncGenerator[dict, None]:
+    """Agent loop using the OpenAI Responses API (for gpt-5-nano and similar)."""
+    client = AsyncOpenAI(api_key=api_key)
+    ctx = ToolContext(user_id=user_id, db=db)
+
+    for iteration in range(settings.agent_max_iterations):
+        logger.info(f"Responses API iteration {iteration + 1}/{settings.agent_max_iterations}")
+
+        try:
+            stream = await client.responses.create(
+                model=model,
+                input=input_messages,
+                tools=responses_tools,
+                reasoning={"effort": "medium", "summary": "auto"},
+                include=["reasoning.encrypted_content"],
+                store=True,
+                stream=True,
+            )
+        except Exception as e:
+            logger.error(f"Responses API call failed: {e}", exc_info=True)
+            yield {"type": "error", "detail": f"LLM error: {str(e)}"}
+            return
+
+        accumulated_text = ""
+        # call_id -> {name, arguments}
+        pending_calls: dict[str, dict] = {}
+        # Reasoning items with encrypted_content to pass on the next turn
+        reasoning_items: list[dict] = []
+
+        async for event in stream:
+            etype = event.type
+
+            if etype == "response.output_text.delta":
+                token = event.delta
+                accumulated_text += token
+                yield {"type": "token", "content": token}
+
+            elif etype == "response.output_item.added":
+                item = event.item
+                if getattr(item, "type", None) == "function_call":
+                    pending_calls[item.call_id] = {"name": item.name, "arguments": ""}
+
+            elif etype == "response.function_call_arguments.delta":
+                call_id = getattr(event, "call_id", None)
+                if call_id and call_id in pending_calls:
+                    pending_calls[call_id]["arguments"] += event.delta
+
+            elif etype == "response.output_item.done":
+                item = event.item
+                item_type = getattr(item, "type", None)
+                if item_type == "function_call":
+                    # Use the final complete arguments from the done event
+                    if item.call_id in pending_calls:
+                        pending_calls[item.call_id]["arguments"] = item.arguments
+                elif item_type == "reasoning":
+                    enc = getattr(item, "encrypted_content", None)
+                    if enc:
+                        reasoning_items.append({
+                            "type": "reasoning",
+                            "id": item.id,
+                            "encrypted_content": enc,
+                        })
+
+        # Emit the full assistant message for DB persistence
+        tool_calls_list = (
+            [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                }
+                for call_id, tc in pending_calls.items()
+            ]
+            if pending_calls
+            else None
+        )
+        yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
+
+        if not pending_calls:
+            yield {"type": "done"}
+            return
+
+        # Build next-turn input: assistant text, reasoning items, then function_call items
+        if accumulated_text:
+            input_messages.append({
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": accumulated_text}],
+            })
+        input_messages.extend(reasoning_items)
+        for call_id, tc in pending_calls.items():
+            input_messages.append({
+                "type": "function_call",
+                "call_id": call_id,
+                "name": tc["name"],
+                "arguments": tc["arguments"],
+            })
+
+        # Execute tools and add results
+        for call_id, tc in pending_calls.items():
+            tc_name = tc["name"]
+            tc_args_raw = tc["arguments"]
+
+            yield {"type": "tool_call_start", "id": call_id, "name": tc_name, "arguments": tc_args_raw}
+
+            try:
+                tc_args = json.loads(tc_args_raw) if tc_args_raw else {}
+            except json.JSONDecodeError as e:
+                tool_result = f"Invalid tool arguments: {e}"
+                yield {"type": "tool_call_error", "id": call_id, "name": tc_name, "error": tool_result}
+                input_messages.append({"type": "function_call_output", "call_id": call_id, "output": tool_result})
+                yield {"type": "tool_message", "tool_call_id": call_id, "content": tool_result}
+                continue
+
+            try:
+                tool = get_tool(tc_name)
+                tool_result = await tool.execute(ctx, tc_args)
+                yield {"type": "tool_call_result", "id": call_id, "name": tc_name, "result": tool_result}
+            except KeyError:
+                tool_result = f"Error: Unknown tool '{tc_name}'"
+                yield {"type": "tool_call_error", "id": call_id, "name": tc_name, "error": tool_result}
+            except Exception as e:
+                logger.error(f"Tool {tc_name} failed: {e}", exc_info=True)
+                tool_result = f"Error: {str(e)}"
+                yield {"type": "tool_call_error", "id": call_id, "name": tc_name, "error": tool_result}
+
+            input_messages.append({"type": "function_call_output", "call_id": call_id, "output": tool_result})
+            yield {"type": "tool_message", "tool_call_id": call_id, "content": tool_result}
+
+    logger.warning(f"Responses API agent hit max iterations ({settings.agent_max_iterations})")
+    yield {
+        "type": "error",
+        "detail": f"Agent exceeded {settings.agent_max_iterations} iterations.",
+    }
 
 
 async def run_agent(
@@ -86,14 +276,22 @@ async def run_agent(
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
 
-    # Get the tool schemas once — they don't change mid-loop.
     tool_schemas = get_tool_schemas()
+    resolved_model = model or settings.chat_model
+    resolved_api_key = api_key or settings.openai_api_key
+
+    # Dispatch to the Responses API loop for models that require it
+    if resolved_model in RESPONSES_API_MODELS:
+        input_messages = _to_responses_input(messages)
+        responses_tools = _to_responses_tools(tool_schemas) if model_supports_tools(resolved_model) else []
+        async for event in _run_responses_agent(
+            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model
+        ):
+            yield event
+        return
 
     # Build tool context — passed to every tool execution
     ctx = ToolContext(user_id=user_id, db=db)
-
-    resolved_model = model or settings.chat_model
-    resolved_api_key = api_key or settings.openai_api_key
 
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")

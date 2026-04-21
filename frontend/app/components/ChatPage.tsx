@@ -11,12 +11,13 @@ import { ToolCallDisplay, type ToolCall } from "@/app/components/ToolCallDisplay
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const AVAILABLE_MODELS = [
+  { id: "gpt-5-nano", label: "GPT-5 nano" },
   { id: "gpt-4o-mini", label: "GPT-4o mini" },
   { id: "gpt-4o", label: "GPT-4o" },
   { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
   { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
 ];
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gpt-5-nano";
 
 const CAPABILITY_CARDS = [
   { icon: "💬", label: "Ask anything", prompt: "What can you help me with?" },
