@@ -4,68 +4,41 @@ Work captured but deferred. Each item has enough context to pick up in any futur
 
 ---
 
-## v7: Conversation Sidebar (HIGH PRIORITY)
+## tools-v2: Additional Tools
 
-**What:** `GET /conversations/` endpoint + sidebar UI. Users can navigate back to prior conversations.
+**What:** Add `url_reader`, `weather`, and `image_generation` tools to the agent. Update the system prompt to reflect the new capabilities.
 
-**Why:** Chat history is what separates a toy from a daily driver. Currently all conversation state is in-memory — a page refresh loses everything.
+**Why:** Widens the "wow" surface. URL reader + image generation are the two features most likely to impress a recruiter or casual user.
 
-**Pros:** Dramatically improves retention for friends/family users. Shows production thinking to recruiters (persistence, pagination).
+**Pros:** All three tools have simple APIs (Jina for URL reading, OpenWeatherMap for weather, OpenAI DALL-E for images).
 
-**Cons:** Sidebar adds layout complexity. Mobile UX needs care (collapsed by default).
+**Cons:** Each tool adds an optional API key dependency. Image generation is expensive per-call.
 
-**Context:** Backend already has `GET /chat/{conversation_id}` which loads a conversation with messages. What's missing:
-- `GET /conversations/` endpoint returning paginated list per user (title, created_at, id)
-- Frontend sidebar component in `ChatPage.tsx`
-- On select: set conversationId + fetch messages via existing endpoint
-
-**Depends on:** v6 landing-chat-ux branch (which extracts ChatPage.tsx).
-
----
-
-## v7: Model Capability Flags
-
-**What:** Replace the hardcoded `model.startswith("ollama/")` tool-call disable with a capability map in config.
-
-**Why:** Newer Ollama models (llama3.3:70b) support function calling reliably. The current check will disable tools on capable models.
-
-**Pros:** Config change to enable tools on a new model, no code change needed.
-
-**Cons:** Minor. The string-prefix check works fine for v6 target models.
-
-**Context:** The check lives in `app/services/agent.py`, in the `acompletion()` call:
-```python
-tools=tool_schemas if not model.startswith("ollama/") else None,
-```
-Replace with a `MODEL_CAPABILITIES` dict in `config.py`:
-```python
-MODEL_CAPABILITIES = {
-    "ollama/llama3.2": {"tools": False},
-    "ollama/mistral":  {"tools": False},
-    "ollama/llama3.3:70b": {"tools": True},
-    # default: True
-}
-```
-
-**Depends on:** v6 multi-model branch.
+**Context:**
+- Tools live in `app/tools/`. Follow the `base.py` `BaseTool` interface.
+- URL reader: `GET https://r.jina.ai/{url}` — returns clean markdown from any URL. No API key needed.
+- Weather: OpenWeatherMap API (free tier). Tool takes `city` argument.
+- Image gen: `openai.images.generate(model="dall-e-3", prompt=..., size="1024x1024")`. Return the URL.
+- Update `AGENT_SYSTEM_PROMPT` in `agent.py` to mention the new tools.
+- Add `JINA_API_KEY` (optional) and `OPENWEATHERMAP_API_KEY` to config/env.
+- Frontend: `ToolCallDisplay` already handles `image_generation` icon (🎨). For image results, render an `<img>` tag if the result looks like a URL.
 
 ---
 
-## v7: Frontend Unit Tests (vitest)
+## tools-v2: Image Rendering in Chat
 
-**What:** Install vitest + @testing-library/react. Add unit tests for frontend helpers and hooks.
+**What:** When a tool result is an image URL (from image_generation), render `<img>` in the message bubble instead of raw text.
 
-**Why:** `tryParseImage()`, `useAuthFetch()`, and message rendering logic are untested. These are the most likely spots for subtle bugs.
+**Why:** Showing a thumbnail is dramatically better UX than showing a URL.
 
-**Pros:** Catches regressions in shared utilities before they break the chat.
+**Context:** In `ChatPage.tsx`, the `tool_call_result` handler appends the result as a string. Add a `tryParseImageUrl(result: string)` helper — if the string starts with `https://` and ends with a known image extension (or matches DALL-E's CDN URL pattern), render an `<img>` tag.
 
-**Cons:** vitest setup adds a dev dependency and a test script. Low friction with CC.
+---
 
-**Context:** Backend pytest is included in v6. Frontend tests deferred to keep v6 scope clean.
-Priority tests:
-- `tryParseImage('{"type":"image","url":"..."}')` → returns object
-- `tryParseImage("regular text")` → returns null
-- `useAuthFetch` attaches Authorization header
-- Message bubble renders markdown (not raw text)
+## Stretch: Streaming memory extraction status
 
-**Depends on:** v6 landing-chat-ux branch (which creates the components being tested).
+**What:** Show a subtle indicator in the UI when memory extraction is running in the background.
+
+**Why:** The background arq job runs 60s after every completed conversation, but the user has no visibility. A small "Saving memories…" indicator would help users trust the memory feature.
+
+**Context:** The `done` SSE event fires when the conversation commits. Memory extraction is scheduled then. The frontend could show a brief indicator after `done` that auto-dismisses after a few seconds.
