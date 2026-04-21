@@ -39,3 +39,6 @@ from app.tools import web_search  # noqa: E402, F401
 from app.tools import document_search  # noqa: E402, F401
 from app.tools import python_executor  # noqa: E402, F401
 from app.tools import memory_search  # noqa: E402, F401
+from app.tools import url_reader  # noqa: E402, F401
+from app.tools import weather  # noqa: E402, F401
+from app.tools import image_generation  # noqa: E402, F401
