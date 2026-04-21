@@ -38,6 +38,14 @@ class MessageResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConversationListItemResponse(BaseModel):
+    id: uuid.UUID
+    title: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ConversationResponse(BaseModel):
     id: uuid.UUID
     title: str | None

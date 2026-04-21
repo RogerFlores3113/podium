@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Conversation, Message
-from app.schemas import ChatRequest, ConversationResponse
+from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
 from app.services.llm import build_conversation_history, get_user_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
@@ -25,6 +25,22 @@ from app.auth import get_current_user_id
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 logger = logging.getLogger(__name__)
+
+
+@router.get("/", response_model=list[ConversationListItemResponse])
+async def list_conversations(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+):
+    """Return the most recent conversations for the current user."""
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc())
+        .limit(limit)
+    )
+    return result.scalars().all()
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
