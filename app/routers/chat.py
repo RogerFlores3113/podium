@@ -51,8 +51,8 @@ async def get_conversation(
 @router.post("/stream")
 @limiter.limit("5/minute")
 async def chat_stream(
-    request_obj: Request,
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -68,10 +68,10 @@ async def chat_stream(
       - done: agent finished
       - error: unrecoverable failure
     """
-    if request.conversation_id:
+    if body.conversation_id:
         result = await db.execute(
             select(Conversation).where(
-                Conversation.id == request.conversation_id,
+                Conversation.id == body.conversation_id,
                 Conversation.user_id == user_id,
             )
         )
@@ -81,7 +81,7 @@ async def chat_stream(
     else:
         conversation = Conversation(
             user_id=user_id,
-            title=request.message[:100],
+            title=body.message[:100],
         )
         db.add(conversation)
         await db.flush()
@@ -90,13 +90,13 @@ async def chat_stream(
         conversation_id=conversation.id,
         user_id=user_id,
         role="user",
-        content=request.message,
+        content=body.message,
     )
     db.add(user_message)
     await db.flush()
 
     history = []
-    if request.conversation_id:
+    if body.conversation_id:
         history = await build_conversation_history(
             db, conversation.id, settings.memory_max_tokens
         )
@@ -119,7 +119,7 @@ async def chat_stream(
             async for agent_event in run_agent(
                 db=db,
                 user_id=user_id,
-                user_message=request.message,
+                user_message=body.message,
                 conversation_history=history,
                 api_key=user_api_key,
                 core_memories_text=core_memories_text,
