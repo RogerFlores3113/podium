@@ -18,6 +18,7 @@ def test_available_models_have_required_fields():
 
 
 def test_provider_for_known_models():
+    assert provider_for_model("gpt-4o-nano") == "openai"
     assert provider_for_model("gpt-4o-mini") == "openai"
     assert provider_for_model("gpt-4o") == "openai"
     assert provider_for_model("claude-3-5-haiku-20241022") == "anthropic"
