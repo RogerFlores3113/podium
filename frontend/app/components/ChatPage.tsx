@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { UserButton } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -41,6 +41,24 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   toolCalls?: ToolCall[];
+}
+
+interface ConversationItem {
+  id: string;
+  title: string | null;
+  created_at: string;
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
@@ -149,6 +167,8 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -163,6 +183,8 @@ export default function ChatPage() {
     } catch {
       // private browsing
     }
+    // Open sidebar by default on wider screens
+    if (window.innerWidth >= 768) setSidebarOpen(true);
   }, []);
 
   const toggleDark = () => {
@@ -176,6 +198,17 @@ export default function ChatPage() {
     }
   };
 
+  const fetchConversations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_URL}/chat/`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setConversations(data);
+    } catch {
+      // sidebar is non-critical
+    }
+  }, [authFetch]);
+
   // Inject welcome message once per mount
   useEffect(() => {
     if (!hasWelcomed.current) {
@@ -183,6 +216,10 @@ export default function ChatPage() {
       setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     }
   }, []);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -199,6 +236,23 @@ export default function ChatPage() {
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setConversationId(null);
     hasWelcomed.current = true;
+  };
+
+  const loadConversation = async (id: string) => {
+    try {
+      const res = await authFetch(`${API_URL}/chat/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const msgs: Message[] = (data.messages as { role: string; content: string }[])
+        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      setMessages(msgs.length > 0 ? msgs : [{ role: "assistant", content: WELCOME_MESSAGE }]);
+      setConversationId(id);
+      // Close sidebar on mobile after selecting
+      if (window.innerWidth < 768) setSidebarOpen(false);
+    } catch {
+      // keep current conversation
+    }
   };
 
   const handleCardClick = (prompt: string) => {
@@ -306,6 +360,9 @@ export default function ChatPage() {
                   return updated;
                 });
                 setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+              } else if (currentEvent === "done") {
+                // Refresh sidebar after new conversation completes
+                fetchConversations();
               }
             }
           }
@@ -373,141 +430,227 @@ export default function ChatPage() {
     messages.length === 1 && messages[0].role === "assistant" && !isLoading;
 
   return (
-    <main className="flex flex-col h-screen max-w-3xl mx-auto p-4">
-      {/* Header */}
-      <div
-        className="flex items-center justify-between mb-4 pb-4"
-        style={{ borderBottom: "1px solid var(--border)" }}
+    <div className="flex h-screen" style={{ background: "var(--bg-base)" }}>
+      {/* Sidebar overlay on mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-10 md:hidden"
+          style={{ background: "rgba(0,0,0,0.3)" }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } fixed md:relative md:translate-x-0 z-20 md:z-auto flex-shrink-0 flex flex-col h-full transition-transform duration-200`}
+        style={{
+          width: "240px",
+          background: "var(--bg-elevated)",
+          borderRight: "1px solid var(--border)",
+        }}
       >
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            Podium
-          </h1>
+        {/* Sidebar header */}
+        <div
+          className="flex items-center justify-between px-4 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            Conversations
+          </span>
           <button
-            onClick={startNewConversation}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-lg font-light transition-opacity hover:opacity-70"
-            style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-            title="New conversation"
-          >
-            +
-          </button>
-        </div>
-        <div className="flex items-center gap-3">
-          {uploadStatus && (
-            <span className="text-sm" style={{ color: "var(--text-muted)" }}>
-              {uploadStatus}
-            </span>
-          )}
-          <label
-            className="cursor-pointer px-3 py-1.5 rounded text-sm transition-opacity hover:opacity-80"
-            style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-          >
-            Upload PDF
-            <input type="file" accept=".pdf" onChange={handleUpload} className="hidden" />
-          </label>
-          <a
-            href="/settings"
-            className="text-sm transition-colors hover:opacity-80"
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden text-lg transition-opacity hover:opacity-70"
             style={{ color: "var(--text-muted)" }}
           >
-            Settings
-          </a>
-          <button
-            onClick={toggleDark}
-            className="text-lg transition-opacity hover:opacity-70"
-            title="Toggle dark mode"
-          >
-            {darkMode ? "☀️" : "🌙"}
+            ✕
           </button>
-          <UserButton />
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-        {messages.map((msg, i) => (
-          <div key={i}>
-            {msg.content && (
-              <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-2`}>
+        {/* New conversation */}
+        <div className="px-3 py-2">
+          <button
+            onClick={startNewConversation}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-opacity hover:opacity-80"
+            style={{ background: "var(--accent-warm)", color: "#fff" }}
+          >
+            <span className="text-base font-light">+</span>
+            New conversation
+          </button>
+        </div>
+
+        {/* Conversation list */}
+        <div className="flex-1 overflow-y-auto px-2 py-1">
+          {conversations.length === 0 ? (
+            <p className="text-xs px-2 py-3" style={{ color: "var(--text-muted)" }}>
+              No conversations yet
+            </p>
+          ) : (
+            conversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => loadConversation(conv.id)}
+                className="w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80"
+                style={{
+                  background: conv.id === conversationId ? "var(--bg-surface)" : "transparent",
+                  border: conv.id === conversationId ? "1px solid var(--border)" : "1px solid transparent",
+                }}
+              >
                 <div
-                  className="max-w-[80%] rounded-lg px-4 py-2"
-                  style={
-                    msg.role === "user"
-                      ? { background: "var(--accent-warm)", color: "#fff" }
-                      : { background: "var(--bg-surface)", color: "var(--text-primary)" }
-                  }
+                  className="text-sm truncate"
+                  style={{ color: "var(--text-primary)" }}
                 >
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
+                  {conv.title || "Untitled"}
                 </div>
-              </div>
-            )}
+                <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  {formatRelativeTime(conv.created_at)}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
 
-            {msg.toolCalls && msg.toolCalls.length > 0 && (
-              <div className="space-y-2 my-2">
-                {msg.toolCalls.map((tc) => (
-                  <ToolCallDisplay key={tc.id} toolCall={tc} />
+      {/* Main area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        <main className="flex flex-col h-full max-w-3xl w-full mx-auto p-4">
+          {/* Header */}
+          <div
+            className="flex items-center justify-between mb-4 pb-4"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="w-7 h-7 flex items-center justify-center rounded text-sm transition-opacity hover:opacity-70"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                title="Toggle sidebar"
+              >
+                ☰
+              </button>
+              <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+                Podium
+              </h1>
+            </div>
+            <div className="flex items-center gap-3">
+              {uploadStatus && (
+                <span className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  {uploadStatus}
+                </span>
+              )}
+              <label
+                className="cursor-pointer px-3 py-1.5 rounded text-sm transition-opacity hover:opacity-80"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+              >
+                Upload PDF
+                <input type="file" accept=".pdf" onChange={handleUpload} className="hidden" />
+              </label>
+              <a
+                href="/settings"
+                className="text-sm transition-colors hover:opacity-80"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Settings
+              </a>
+              <button
+                onClick={toggleDark}
+                className="text-lg transition-opacity hover:opacity-70"
+                title="Toggle dark mode"
+              >
+                {darkMode ? "☀️" : "🌙"}
+              </button>
+              <UserButton />
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+            {messages.map((msg, i) => (
+              <div key={i}>
+                {msg.content && (
+                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-2`}>
+                    <div
+                      className="max-w-[80%] rounded-lg px-4 py-2"
+                      style={
+                        msg.role === "user"
+                          ? { background: "var(--accent-warm)", color: "#fff" }
+                          : { background: "var(--bg-surface)", color: "var(--text-primary)" }
+                      }
+                    >
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="space-y-2 my-2">
+                    {msg.toolCalls.map((tc) => (
+                      <ToolCallDisplay key={tc.id} toolCall={tc} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Capability cards — shown only on fresh conversation */}
+            {showCapabilityCards && (
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {CAPABILITY_CARDS.map((card) => (
+                  <button
+                    key={card.label}
+                    onClick={() => handleCardClick(card.prompt)}
+                    className="flex items-center gap-3 rounded-lg px-4 py-3 text-left transition-opacity hover:opacity-80"
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    <span className="text-xl">{card.icon}</span>
+                    <span className="text-sm font-medium">{card.label}</span>
+                  </button>
                 ))}
               </div>
             )}
-          </div>
-        ))}
 
-        {/* Capability cards — shown only on fresh conversation */}
-        {showCapabilityCards && (
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            {CAPABILITY_CARDS.map((card) => (
-              <button
-                key={card.label}
-                onClick={() => handleCardClick(card.prompt)}
-                className="flex items-center gap-3 rounded-lg px-4 py-3 text-left transition-opacity hover:opacity-80"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                <span className="text-xl">{card.icon}</span>
-                <span className="text-sm font-medium">{card.label}</span>
-              </button>
-            ))}
+            <div ref={messagesEndRef} />
           </div>
-        )}
 
-        <div ref={messagesEndRef} />
+          {/* Input */}
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me anything…"
+              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+              }}
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "var(--accent-warm)", color: "#fff" }}
+            >
+              {isLoading ? "…" : "Send"}
+            </button>
+          </form>
+        </main>
       </div>
-
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask me anything…"
-          className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            color: "var(--text-primary)",
-          }}
-          disabled={isLoading}
-        />
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: "var(--accent-warm)", color: "#fff" }}
-        >
-          {isLoading ? "…" : "Send"}
-        </button>
-      </form>
-    </main>
+    </div>
   );
 }
