@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { tryParseImageUrl } from "@/app/utils/image";
 
 const TOOL_ICONS: Record<string, string> = {
   web_search: "🔍",
@@ -8,6 +9,8 @@ const TOOL_ICONS: Record<string, string> = {
   python_executor: "🐍",
   memory_search: "🧠",
   image_generation: "🎨",
+  url_reader: "🔗",
+  weather: "🌤️",
 };
 
 export interface ToolCall {
@@ -86,16 +89,26 @@ export function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
               <div className="mb-1" style={{ color: "var(--text-muted)" }}>
                 Result:
               </div>
-              <pre
-                className="p-2 rounded overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {toolCall.result}
-              </pre>
+              {tryParseImageUrl(toolCall.result) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={tryParseImageUrl(toolCall.result)!}
+                  alt="Generated image"
+                  className="rounded max-w-full max-h-96 object-contain"
+                  style={{ border: "1px solid var(--border)" }}
+                />
+              ) : (
+                <pre
+                  className="p-2 rounded overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {toolCall.result}
+                </pre>
+              )}
             </div>
           )}
           {toolCall.error && (
