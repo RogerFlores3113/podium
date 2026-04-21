@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth, UserButton } from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
+import { useAuthFetch } from "@/app/hooks/useAuthFetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -24,7 +25,7 @@ interface MemoryInfo {
 }
 
 export default function SettingsPage() {
-  const { getToken } = useAuth();
+  const authFetch = useAuthFetch();
 
   // API keys state
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -39,17 +40,6 @@ export default function SettingsPage() {
   const [newCategory, setNewCategory] = useState("preference");
   const [newContent, setNewContent] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-
-  const authFetch = async (url: string, options: RequestInit = {}) => {
-    const token = await getToken();
-    return fetch(url, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${token}`,
-      },
-    });
-  };
 
   // --- API Keys ---
 
@@ -138,12 +128,12 @@ export default function SettingsPage() {
   useEffect(() => {
     loadKeys();
     loadMemories();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadMemories();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryFilter]);
 
   const startEditing = (memory: MemoryInfo) => {
@@ -154,9 +144,15 @@ export default function SettingsPage() {
   return (
     <main className="max-w-3xl mx-auto p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          Settings
+        </h1>
         <div className="flex items-center gap-3">
-          <a href="/" className="text-sm text-gray-600 hover:text-gray-900">
+          <a
+            href="/"
+            className="text-sm transition-colors"
+            style={{ color: "var(--text-muted)" }}
+          >
             Back to Chat
           </a>
           <UserButton />
@@ -165,8 +161,10 @@ export default function SettingsPage() {
 
       {/* --- API Keys --- */}
       <section className="mb-12">
-        <h2 className="text-lg font-medium mb-4">API Keys</h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <h2 className="text-lg font-medium mb-4" style={{ color: "var(--text-primary)" }}>
+          API Keys
+        </h2>
+        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
           Add your own API keys to use your preferred model provider. Keys are
           encrypted at rest and never shown after saving.
         </p>
@@ -175,7 +173,12 @@ export default function SettingsPage() {
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            className="border rounded-lg px-3 py-2"
+            className="rounded-lg px-3 py-2 text-sm"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
           >
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
@@ -186,34 +189,51 @@ export default function SettingsPage() {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="sk-..."
-            className="flex-1 border rounded-lg px-4 py-2"
+            className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
           />
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ background: "var(--accent-warm)", color: "#fff" }}
           >
             Save Key
           </button>
         </form>
 
-        {keyStatus && <p className="text-sm text-gray-500 mb-4">{keyStatus}</p>}
+        {keyStatus && (
+          <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+            {keyStatus}
+          </p>
+        )}
 
         {keys.length > 0 ? (
           <div className="space-y-2">
             {keys.map((key) => (
               <div
                 key={key.id}
-                className="flex items-center justify-between border rounded-lg px-4 py-3"
+                className="flex items-center justify-between rounded-lg px-4 py-3"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                }}
               >
                 <div>
-                  <span className="font-medium capitalize">{key.provider}</span>
-                  <span className="text-gray-400 ml-2 font-mono text-sm">
+                  <span className="font-medium capitalize" style={{ color: "var(--text-primary)" }}>
+                    {key.provider}
+                  </span>
+                  <span className="ml-2 font-mono text-sm" style={{ color: "var(--text-muted)" }}>
                     {key.key_hint}
                   </span>
                 </div>
                 <button
                   onClick={() => handleDeleteKey(key.id)}
-                  className="text-red-500 hover:text-red-700 text-sm"
+                  className="text-sm transition-opacity hover:opacity-70"
+                  style={{ color: "#b91c1c" }}
                 >
                   Remove
                 </button>
@@ -221,7 +241,7 @@ export default function SettingsPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             No API keys configured. Using system default.
           </p>
         )}
@@ -230,18 +250,21 @@ export default function SettingsPage() {
       {/* --- Memories --- */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Memories</h2>
+          <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
+            Memories
+          </h2>
           {memories.length > 0 && (
             <button
               onClick={handleDeleteAllMemories}
-              className="text-red-500 hover:text-red-700 text-sm"
+              className="text-sm transition-opacity hover:opacity-70"
+              style={{ color: "#b91c1c" }}
             >
               Delete all memories
             </button>
           )}
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
           Things the AI has learned about you. Facts and preferences are always
           included in conversations; context memories are retrieved when relevant.
         </p>
@@ -252,11 +275,12 @@ export default function SettingsPage() {
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
-              className={`px-3 py-1.5 rounded-full text-sm ${
+              className="px-3 py-1.5 rounded-full text-sm transition-colors"
+              style={
                 categoryFilter === cat
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                  ? { background: "var(--accent-warm)", color: "#fff" }
+                  : { background: "var(--bg-elevated)", color: "var(--text-muted)" }
+              }
             >
               {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1) + "s"}
             </button>
@@ -268,7 +292,12 @@ export default function SettingsPage() {
           <select
             value={newCategory}
             onChange={(e) => setNewCategory(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm"
+            className="rounded-lg px-3 py-2 text-sm"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
           >
             <option value="fact">Fact</option>
             <option value="preference">Preference</option>
@@ -279,40 +308,56 @@ export default function SettingsPage() {
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="e.g., User prefers dark mode"
-            className="flex-1 border rounded-lg px-4 py-2 text-sm"
+            className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
           />
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ background: "var(--accent-warm)", color: "#fff" }}
           >
             Add
           </button>
         </form>
 
         {memories.length === 0 ? (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             No memories yet. They&apos;ll be extracted from your conversations.
           </p>
         ) : (
           <div className="space-y-2">
             {memories.map((mem) => (
-              <div key={mem.id} className="border rounded-lg px-4 py-3 bg-white">
+              <div
+                key={mem.id}
+                className="rounded-lg px-4 py-3"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span
-                        className={`text-xs px-2 py-0.5 rounded ${
+                        className="text-xs px-2 py-0.5 rounded"
+                        style={
                           mem.category === "fact"
-                            ? "bg-blue-100 text-blue-700"
+                            ? { background: "#dbeafe", color: "#1d4ed8" }
                             : mem.category === "preference"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-purple-100 text-purple-700"
-                        }`}
+                            ? { background: "#dcfce7", color: "#15803d" }
+                            : { background: "#f3e8ff", color: "#7e22ce" }
+                        }
                       >
                         {mem.category}
                       </span>
                       {mem.edited_by_user && (
-                        <span className="text-xs text-gray-400">(edited)</span>
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          (edited)
+                        </span>
                       )}
                     </div>
                     {editingId === mem.id ? (
@@ -321,37 +366,51 @@ export default function SettingsPage() {
                           type="text"
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
-                          className="flex-1 border rounded px-2 py-1 text-sm"
+                          className="flex-1 rounded px-2 py-1 text-sm focus:outline-none"
+                          style={{
+                            background: "var(--bg-elevated)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text-primary)",
+                          }}
                           autoFocus
                         />
                         <button
                           onClick={() => handleUpdateMemory(mem.id)}
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                          className="px-3 py-1 rounded text-sm font-medium transition-opacity hover:opacity-80"
+                          style={{ background: "var(--accent-warm)", color: "#fff" }}
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="bg-gray-100 px-3 py-1 rounded text-sm hover:bg-gray-200"
+                          className="px-3 py-1 rounded text-sm transition-colors"
+                          style={{
+                            background: "var(--bg-elevated)",
+                            color: "var(--text-muted)",
+                          }}
                         >
                           Cancel
                         </button>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-900">{mem.content}</p>
+                      <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+                        {mem.content}
+                      </p>
                     )}
                   </div>
                   {editingId !== mem.id && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => startEditing(mem)}
-                        className="text-sm text-gray-500 hover:text-gray-900"
+                        className="text-sm transition-colors"
+                        style={{ color: "var(--text-muted)" }}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteMemory(mem.id)}
-                        className="text-sm text-red-500 hover:text-red-700"
+                        className="text-sm transition-opacity hover:opacity-70"
+                        style={{ color: "#b91c1c" }}
                       >
                         Delete
                       </button>
