@@ -6,7 +6,7 @@ from typing import Any
 from litellm import acompletion
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.config import settings, model_supports_tools
 from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
 
@@ -39,6 +39,7 @@ async def run_agent(
     conversation_history: list[dict],
     api_key: str | None = None,
     core_memories_text: str | None = None,
+    model: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Run the agent loop for a single user message.
@@ -84,19 +85,17 @@ async def run_agent(
     # Build tool context — passed to every tool execution
     ctx = ToolContext(user_id=user_id, db=db)
 
-    # Resolve the API key (user's BYOK or system default)
+    resolved_model = model or settings.chat_model
     resolved_api_key = api_key or settings.openai_api_key
 
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")
 
-        # Stream the LLM response. This might include text tokens AND/OR
-        # tool calls, potentially interleaved. We accumulate both.
         try:
             response = await acompletion(
-                model=settings.chat_model,
+                model=resolved_model,
                 messages=messages,
-                tools=tool_schemas,
+                tools=tool_schemas if model_supports_tools(resolved_model) else None,
                 api_key=resolved_api_key,
                 max_tokens=1500,
                 stream=True,

@@ -1,6 +1,38 @@
 from pydantic_settings import BaseSettings
 
 
+# Models available for selection. Provider drives which BYOK key is used.
+AVAILABLE_MODELS: list[dict] = [
+    {"id": "gpt-4o-mini", "label": "GPT-4o mini", "provider": "openai"},
+    {"id": "gpt-4o", "label": "GPT-4o", "provider": "openai"},
+    {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku", "provider": "anthropic"},
+    {"id": "claude-3-5-sonnet-20241022", "label": "Claude 3.5 Sonnet", "provider": "anthropic"},
+]
+
+# Per-model capability flags. Models not listed default to tools=True.
+MODEL_CAPABILITIES: dict[str, dict] = {
+    "ollama/llama3.2": {"tools": False},
+    "ollama/mistral": {"tools": False},
+    "ollama/codellama": {"tools": False},
+}
+
+
+def provider_for_model(model_id: str) -> str:
+    """Infer the provider from a model ID."""
+    for m in AVAILABLE_MODELS:
+        if m["id"] == model_id:
+            return m["provider"]
+    if model_id.startswith("claude"):
+        return "anthropic"
+    if model_id.startswith("ollama/"):
+        return "ollama"
+    return "openai"
+
+
+def model_supports_tools(model_id: str) -> bool:
+    return MODEL_CAPABILITIES.get(model_id, {}).get("tools", True)
+
+
 class Settings(BaseSettings):
     database_url: str
     openai_api_key: str

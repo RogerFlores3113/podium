@@ -8,6 +8,14 @@ import { useAuthFetch } from "@/app/hooks/useAuthFetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const AVAILABLE_MODELS = [
+  { id: "gpt-4o-mini", label: "GPT-4o mini" },
+  { id: "gpt-4o", label: "GPT-4o" },
+  { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
+  { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+];
+const DEFAULT_MODEL = "gpt-4o-mini";
+
 const TOOL_ICONS: Record<string, string> = {
   web_search: "🔍",
   document_search: "📄",
@@ -169,6 +177,7 @@ export default function ChatPage() {
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -179,6 +188,10 @@ export default function ChatPage() {
       if (stored === "dark") {
         setDarkMode(true);
         document.documentElement.setAttribute("data-theme", "dark");
+      }
+      const storedModel = localStorage.getItem("selectedModel");
+      if (storedModel && AVAILABLE_MODELS.some((m) => m.id === storedModel)) {
+        setSelectedModel(storedModel);
       }
     } catch {
       // private browsing
@@ -273,7 +286,7 @@ export default function ChatPage() {
       const response = await authFetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, conversation_id: conversationId }),
+        body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
       });
 
       const reader = response.body?.getReader();
@@ -532,6 +545,24 @@ export default function ChatPage() {
               <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
                 Podium
               </h1>
+              <select
+                value={selectedModel}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value);
+                  try { localStorage.setItem("selectedModel", e.target.value); } catch {}
+                }}
+                disabled={isLoading}
+                className="text-xs rounded px-2 py-1 focus:outline-none transition-opacity disabled:opacity-50"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {AVAILABLE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center gap-3">
               {uploadStatus && (

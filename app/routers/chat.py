@@ -15,16 +15,19 @@ from app.services.llm import build_conversation_history, get_user_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
 
-from app.config import settings
-from app.limiter import limiter
-
-from app.config import settings
+from app.config import settings, AVAILABLE_MODELS, provider_for_model
 from app.limiter import limiter
 from app.auth import get_current_user_id
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 logger = logging.getLogger(__name__)
+
+
+@router.get("/models")
+async def list_models():
+    """Return the list of models available for selection."""
+    return AVAILABLE_MODELS
 
 
 @router.get("/", response_model=list[ConversationListItemResponse])
@@ -117,7 +120,9 @@ async def chat_stream(
             db, conversation.id, settings.memory_max_tokens
         )
 
-    user_api_key = await get_user_api_key(db, user_id, "openai")
+    selected_model = body.model or settings.chat_model
+    provider = provider_for_model(selected_model)
+    user_api_key = await get_user_api_key(db, user_id, provider)
 
     # Load core memories for prompt injection
     core_memories = await retrieve_core_memories(db, user_id)
@@ -139,6 +144,7 @@ async def chat_stream(
                 conversation_history=history,
                 api_key=user_api_key,
                 core_memories_text=core_memories_text,
+                model=selected_model,
             ):
                 event_type = agent_event["type"]
 
@@ -199,7 +205,7 @@ async def chat_stream(
 
                     # Schedule memory extraction (debounced — later jobs supersede this one)
                     try:
-                        redis_pool = request_obj.app.state.redis_pool
+                        redis_pool = request.app.state.redis_pool
                         await redis_pool.enqueue_job(
                             "extract_memories_job",
                             str(conversation.id),
