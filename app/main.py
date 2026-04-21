@@ -8,10 +8,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
-from app.database import engine, async_session, memories
+from app.database import engine, async_session
 from app.errors import global_exception_handler
 from app.limiter import limiter
-from app.routers import documents, chat, keys
+from app.routers import documents, chat, keys, memories
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
