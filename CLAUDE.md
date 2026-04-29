@@ -36,3 +36,11 @@ Key routing rules:
 - Review what gstack has learned → invoke /learn
 - Tune question sensitivity → invoke /plan-tune
 - Code quality dashboard → invoke /health
+
+## Alembic migration note
+
+Two migrations share the human-readable title "add tool call fields to messages":
+- `ca316cd7fec5` — adds `tool_calls` (JSONB) and `tool_call_ids` (String)
+- `dc368990e622` — follow-up that renames `tool_call_ids` → `tool_call_id` (singular)
+
+These are chained (`dc368`'s `down_revision = 'ca316cd7fec5'`). Both are intentional and both must stay.
