@@ -78,7 +78,6 @@ class Settings(BaseSettings):
     # Agent / tools
     tavily_api_key: str = ""
     e2b_api_key: str = ""
-    openweathermap_api_key: str = ""
     agent_max_iterations: int = 10
 
     # Memory extraction
