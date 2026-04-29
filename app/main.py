@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import engine, async_session
 from app.errors import global_exception_handler
 from app.limiter import limiter
-from app.routers import documents, chat, keys, memories
+from app.routers import documents, chat, keys, memories, guest
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -54,6 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(guest.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(keys.router)

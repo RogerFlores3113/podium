@@ -42,6 +42,7 @@ class DocumentSearchTool(Tool):
             query=query,
             user_id=ctx.user_id,
             top_k=top_k,
+            include_seed=ctx.is_guest,
         )
 
         if not chunks:

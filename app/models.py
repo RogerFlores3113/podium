@@ -156,11 +156,25 @@ class User(Base):
         String(100), nullable=False, unique=True, index=True
     )
     email: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_guest: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default="now()", default=datetime.utcnow
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
 
     api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="user")
+
+
+# Index for the guest sweep job — efficiently finds expired guest rows
+user_guest_sweep_index = Index(
+    "ix_users_is_guest_last_active",
+    User.is_guest,
+    User.last_active_at,
+)
 
 
 class ApiKey(Base):

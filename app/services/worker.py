@@ -1,7 +1,8 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from arq.connections import RedisSettings
+from arq.cron import cron
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.config import settings
@@ -101,6 +102,36 @@ async def extract_memories_job(
         )
 
 
+async def cleanup_expired_guests(ctx: dict):
+    """Hourly job: delete guest users older than guest_session_duration_hours."""
+    from app.models import User, Document, Conversation, Memory
+    from sqlalchemy import select, delete
+
+    db_session = ctx["db_session"]
+    cutoff = datetime.utcnow() - timedelta(hours=settings.guest_session_duration_hours)
+
+    async with db_session() as db:
+        result = await db.execute(
+            select(User).where(User.is_guest == True, User.created_at < cutoff)  # noqa: E712
+        )
+        expired = result.scalars().all()
+        if not expired:
+            logger.info("Guest sweep: no expired guest users found")
+            return
+
+        expired_ids = [str(u.clerk_id) for u in expired]
+
+        # Explicit deletes because user_id columns are not FK-constrained to users.id
+        await db.execute(delete(Memory).where(Memory.user_id.in_(expired_ids)))
+        await db.execute(delete(Document).where(Document.user_id.in_(expired_ids)))
+        await db.execute(delete(Conversation).where(Conversation.user_id.in_(expired_ids)))
+        for u in expired:
+            await db.delete(u)
+
+        await db.commit()
+        logger.info(f"Guest sweep: deleted {len(expired)} expired guest users")
+
+
 async def startup(ctx: dict):
     """Called when the worker starts. Set up shared resources."""
     engine = create_async_engine(settings.database_url, echo=False)
@@ -116,7 +147,8 @@ async def shutdown(ctx: dict):
 class WorkerSettings:
     """arq worker configuration."""
 
-    functions = [process_document, extract_memories_job]
+    functions = [process_document, extract_memories_job, cleanup_expired_guests]
+    cron_jobs = [cron(cleanup_expired_guests, minute=0)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
