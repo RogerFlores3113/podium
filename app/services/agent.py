@@ -35,6 +35,13 @@ Guidelines:
 - You can call multiple tools in sequence.
 - If you don't need any tools, just answer directly from your knowledge.
 - Be concise and specific. Cite sources when you use them.
+
+IMPORTANT — Tool synthesis rule:
+After EVERY tool call, you MUST write a complete response to the user that:
+1. Summarizes what the tool found (or explains if it found nothing useful).
+2. Directly answers the user's original question using that information.
+3. Cites URLs when web_search results are used.
+Never end your turn with only tool calls and no text — always follow tool results with a user-facing answer.
 """
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
