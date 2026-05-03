@@ -1,8 +1,6 @@
 import os
 import uuid
 
-from arq import create_pool
-from arq.connections import RedisSettings
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,9 +50,7 @@ async def upload_document(
     await db.refresh(doc)
 
     # Enqueue background processing
-    redis_pool = await create_pool(
-        RedisSettings.from_dsn(settings.redis_url)
-    )
+    redis_pool = request.app.state.redis_pool
     await redis_pool.enqueue_job(
         "process_document",
         str(doc.id),
@@ -62,7 +58,6 @@ async def upload_document(
         file.filename,
         user_id,
     )
-    await redis_pool.close()
 
     return doc
 
