@@ -125,6 +125,12 @@ async def chat_stream(
         db.add(conversation)
         await db.flush()
 
+    history = []
+    if body.conversation_id:
+        history = await build_conversation_history(
+            db, conversation.id, settings.memory_max_tokens
+        )
+
     user_message = Message(
         conversation_id=conversation.id,
         user_id=user_id,
@@ -133,12 +139,6 @@ async def chat_stream(
     )
     db.add(user_message)
     await db.flush()
-
-    history = []
-    if body.conversation_id:
-        history = await build_conversation_history(
-            db, conversation.id, settings.memory_max_tokens
-        )
 
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
@@ -231,6 +231,7 @@ async def chat_stream(
                             "extract_memories_job",
                             str(conversation.id),
                             user_id,
+                            _job_id=f"extract:{conversation.id}",
                             _defer_by=settings.memory_extraction_delay,
                         )
                     except Exception as e:
