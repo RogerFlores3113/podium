@@ -80,6 +80,26 @@ When summarizing this conversation, preserve:
 - Decisions made and their rationale
 - Current test status and any failures
 
+## GSD Workflow
+
+This project uses GSD for planning and execution. Planning docs live in `.planning/` (local-only, gitignored).
+
+**Current milestone:** Stabilization & Hardening (6 phases, 27 requirements)
+**State:** `.planning/STATE.md` | **Roadmap:** `.planning/ROADMAP.md`
+
+Before starting any phase:
+- Run `/gsd-discuss-phase N` to load phase context
+- Run `/gsd-plan-phase N` to generate the execution plan
+- Run `/gsd-execute-phase N` to execute autonomously (YOLO mode)
+
+Phase order and dependencies:
+1. Wire Protocol & Visibility — WIRE-01–04, QUAL-01 (foundation, do first)
+2. Agent Reliability — AGENT-01–03, QUAL-02–04 (depends on Phase 1)
+3. Destructive UX Paths — CONV-01–02, MEM-01–02 (independent)
+4. Loading & Error UX — CHAT-01–06 (depends on Phase 1 + 2)
+5. Model Roster & Ollama — MODEL-01–05 (verify model IDs before merge)
+6. PR #14 Audit & Smoke Test — AUDIT-01–03 (runs last)
+
 ## Alembic migration note
 
 Two migrations share the title "add tool call fields to messages":
