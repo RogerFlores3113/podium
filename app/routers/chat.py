@@ -254,5 +254,7 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": str(e)}),
             }
+        finally:
+            await db.commit()
 
     return EventSourceResponse(event_generator(), sep="\n", ping=15)
