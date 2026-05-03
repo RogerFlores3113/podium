@@ -255,4 +255,4 @@ async def chat_stream(
                 "data": json.dumps({"detail": str(e)}),
             }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(event_generator(), sep="\n", ping=15)
