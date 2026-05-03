@@ -15,10 +15,6 @@ from app.services.encryption import (
     set_cached_key,
 )
 
-from collections.abc import AsyncGenerator
-
-from litellm import acompletion
-
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's personal knowledge base.
@@ -106,75 +102,6 @@ def build_context_string(chunks: list[dict], max_tokens: int) -> str:
 
     logger.info(f"Context: {len(parts)}/{len(chunks)} chunks, ~{token_count} tokens")
     return "\n\n---\n\n".join(parts)
-
-
-async def generate_response(
-    query: str,
-    context_chunks: list[dict],
-    conversation_history: list[dict] | None = None,
-    api_key: str | None = None,
-) -> str:
-    """Build a prompt with context + history and send to the LLM."""
-
-    context = build_context_string(context_chunks, settings.context_max_tokens)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Add conversation history if present
-    if conversation_history:
-        messages.extend(conversation_history)
-
-    # The current user message includes the retrieved context
-    messages.append({
-        "role": "user",
-        "content": f"Context from your knowledge base:\n\n{context}\n\n---\n\nQuestion: {query}",
-    })
-
-    response = await acompletion(
-        model=settings.chat_model,
-        messages=messages,
-        api_key=resolve_api_key(api_key),
-        max_tokens=1000,
-    )
-
-    return response.choices[0].message.content
-
-async def generate_response_stream(
-    query: str,
-    context_chunks: list[dict],
-    conversation_history: list[dict] | None = None,
-    api_key: str | None = None,
-) -> AsyncGenerator[str, None]:
-    """
-    Same as generate_response, but yields tokens as they arrive.
-
-    The caller is responsible for collecting the full text if needed
-    (e.g., to save to the database).
-    """
-    context = build_context_string(context_chunks, settings.context_max_tokens)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if conversation_history:
-        messages.extend(conversation_history)
-
-    messages.append({
-        "role": "user",
-        "content": f"Context from your knowledge base:\n\n{context}\n\n---\n\nQuestion: {query}",
-    })
-
-    response = await acompletion(
-        model=settings.chat_model,
-        messages=messages,
-        api_key=resolve_api_key(api_key),
-        max_tokens=1000,
-        stream=True,  # This is the only difference
-    )
-
-    async for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content:
-            yield content
 
 
 async def get_user_api_key(
