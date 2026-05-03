@@ -26,23 +26,7 @@ def upgrade() -> None:
             server_default="false",
         ),
     )
-    op.add_column(
-        "users",
-        sa.Column(
-            "last_active_at",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-    )
-    op.create_index(
-        "ix_users_is_guest_last_active",
-        "users",
-        ["is_guest", "last_active_at"],
-    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_users_is_guest_last_active", table_name="users")
-    op.drop_column("users", "last_active_at")
     op.drop_column("users", "is_guest")

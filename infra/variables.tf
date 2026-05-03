@@ -61,3 +61,9 @@ variable "e2b_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "guest_jwt_secret" {
+  description = "HS256 secret for signing guest session JWTs. Generate: openssl rand -hex 32"
+  type        = string
+  sensitive   = true
+}

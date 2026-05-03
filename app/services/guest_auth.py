@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -15,7 +16,10 @@ _ALGORITHM = "HS256"
 
 def _guest_secret() -> str:
     if not settings.guest_jwt_secret:
-        raise RuntimeError("GUEST_JWT_SECRET is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Guest sessions are not available — server misconfiguration.",
+        )
     return settings.guest_jwt_secret
 
 

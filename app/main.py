@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.guest_jwt_secret:
+        logger.critical(
+            "GUEST_JWT_SECRET is not set — guest sessions will return 503 until this is configured"
+        )
+
     # Create pgvector extension on startup
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
