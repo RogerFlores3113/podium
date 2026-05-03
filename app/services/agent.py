@@ -180,6 +180,22 @@ async def _run_responses_agent(
         yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
 
         if not pending_calls:
+            if not accumulated_text.strip():
+                if iteration == 0:
+                    input_messages.append({
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "Please summarize your findings and answer my question."}],
+                    })
+                    logger.warning(
+                        "Empty completion (Responses API) on iteration %d — retrying", iteration
+                    )
+                    continue
+                else:
+                    yield {
+                        "type": "assistant_message",
+                        "content": "I wasn't able to generate a response. Please try again.",
+                        "tool_calls": None,
+                    }
             yield {"type": "done"}
             return
 
@@ -370,6 +386,26 @@ async def run_agent(
 
         # Stream is done for this iteration. Now decide: is the agent finished,
         # or does it need to execute tools and loop again?
+
+        # Empty-completion guard: no text and no tool calls = silent done
+        if not accumulated_tool_calls and not accumulated_text.strip():
+            if iteration == 0:
+                # Retry once with a nudge message
+                messages.append({
+                    "role": "user",
+                    "content": "Please summarize your findings and answer my question.",
+                })
+                logger.warning("Empty completion on iteration %d — retrying with nudge", iteration)
+                continue
+            else:
+                # Already retried — yield graceful fallback
+                yield {
+                    "type": "assistant_message",
+                    "content": "I wasn't able to generate a response. Please try again.",
+                    "tool_calls": None,
+                }
+                yield {"type": "done"}
+                return
 
         if not accumulated_tool_calls:
             # No tool calls → this is the final response. Persist and return.
