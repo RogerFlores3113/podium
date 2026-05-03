@@ -194,13 +194,13 @@ export default function ChatPage() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\r\n\r\n");
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+        const parts = buffer.split("\n\n");
         buffer = parts.pop() || "";
 
         for (const part of parts) {
           if (!part.trim()) continue;
-          const lines = part.split("\r\n");
+          const lines = part.split("\n");
           let currentEvent = "";
 
           for (const line of lines) {
