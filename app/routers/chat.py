@@ -67,6 +67,31 @@ async def get_conversation(
     return conversation
 
 
+@router.delete("/{conversation_id}")
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete a conversation. Cascades to messages via FK ondelete=CASCADE.
+
+    Memory.source_conversation_id is set to NULL (FK ondelete=SET NULL),
+    preserving extracted memories with provenance link severed.
+    """
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.clerk_id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await db.delete(conversation)
+    await db.commit()
+    return {"detail": "Conversation deleted"}
+
+
 @router.post("/stream")
 @limiter.limit("5/minute")
 async def chat_stream(
