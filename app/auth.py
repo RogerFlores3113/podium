@@ -4,6 +4,7 @@ from functools import lru_cache
 import httpx
 import jwt
 from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientError
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +54,7 @@ def verify_token(token: str) -> dict:
     """
     try:
         return verify_clerk_token(token)
-    except jwt.InvalidTokenError:
+    except (jwt.InvalidTokenError, PyJWKClientError):
         pass
 
     try:

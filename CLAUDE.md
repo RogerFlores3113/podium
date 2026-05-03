@@ -1,46 +1,90 @@
+# CLAUDE.md
 
-## Skill routing
+## Core principles
 
-When the user's request matches an available skill, invoke it via the Skill tool. The
-skill has multi-step workflows, checklists, and quality gates that produce better
-results than an ad-hoc answer. When in doubt, invoke the skill. A false positive is
-cheaper than a false negative.
+1. Don't assume. Don't hide confusion. Surface tradeoffs.
+2. Minimum code that solves the problem. Nothing speculative.
+3. Touch only what you must. Clean up only your own mess. To clean up
+   anything else, propose it during planning — never during implementation.
+4. Define success criteria. Loop until verified.
 
-Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke /office-hours
-- Strategy, scope, "think bigger", "what should we build" → invoke /plan-ceo-review
-- Architecture, "does this design make sense" → invoke /plan-eng-review
-- Design system, brand, "how should this look" → invoke /design-consultation
-- Design review of a plan → invoke /plan-design-review
-- Developer experience of a plan → invoke /plan-devex-review
-- "Review everything", full review pipeline → invoke /autoplan
-- Bugs, errors, "why is this broken", "wtf", "this doesn't work" → invoke /investigate
-- Test the site, find bugs, "does this work" → invoke /qa (or /qa-only for report only)
-- Code review, check the diff, "look at my changes" → invoke /review
-- Visual polish, design audit, "this looks off" → invoke /design-review
-- Developer experience audit, try onboarding → invoke /devex-review
-- Ship, deploy, create a PR, "send it" → invoke /ship
-- Merge + deploy + verify → invoke /land-and-deploy
-- Configure deployment → invoke /setup-deploy
-- Post-deploy monitoring → invoke /canary
-- Update docs after shipping → invoke /document-release
-- Weekly retro, "how'd we do" → invoke /retro
-- Second opinion, codex review → invoke /codex
-- Safety mode, careful mode, lock it down → invoke /careful or /guard
-- Restrict edits to a directory → invoke /freeze or /unfreeze
-- Upgrade gstack → invoke /gstack-upgrade
-- Save progress, "save my work" → invoke /context-save
-- Resume, restore, "where was I" → invoke /context-restore
-- Security audit, OWASP, "is this secure" → invoke /cso
-- Performance regression, page speed, benchmarks → invoke /benchmark
-- Review what gstack has learned → invoke /learn
-- Tune question sensitivity → invoke /plan-tune
-- Code quality dashboard → invoke /health
+## Two modes of operation
+
+### Planning mode (human in the loop)
+
+Superpowers is installed. Use its brainstorm → plan pipeline for any
+non-trivial work. Do not skip phases.
+
+During planning, be thorough and over-communicate:
+- When a design decision has multiple valid options, present them all with
+  tradeoffs. Don't pick silently.
+- Ask clarifying questions early. Exhaust ambiguity before we leave planning.
+- Flag risks, unknowns, and things that could go wrong.
+
+Before implementation begins, produce a **design doc** as a markdown file in
+`docs/plans/<feature-name>.md`. The design doc must include:
+- Problem statement (what and why)
+- Key design decisions with tradeoffs considered and choices made
+- File-level change list (which files are created, modified, deleted)
+- Success criteria as testable assertions
+- Risks and mitigations
+- Test plan: what is tested, what edge cases are covered
+
+The design doc is the contract. Do not begin implementation until I sign off.
+
+### Execution mode (fully autonomous)
+
+Once I approve the design doc, execute the entire plan without asking
+further questions. The design doc has the answers — refer to it.
+
+- If you hit an ambiguity the design doc doesn't cover, make the most
+  conservative choice, document it as a comment, and keep going.
+- If you hit a blocker that genuinely cannot be resolved without human
+  input, write it to `docs/plans/<feature-name>-blockers.md` and continue
+  with the rest of the plan.
+- Do not stop to ask "should I continue?" — yes, always continue.
+- After all tasks are complete, run the full test suite and summarize
+  results. Write a completion report to `docs/plans/<feature-name>-done.md`
+  covering: what was built, any deviations from the plan, any blockers
+  written, and final test status.
+
+## Testing
+
+Write tests before implementation (red-green-refactor). Superpowers enforces
+this — follow it. Additionally:
+
+- Every public function gets at least one happy-path and one edge-case test.
+- Tests must be runnable in isolation. No test should depend on another.
+- Name tests as sentences that describe behavior, not method names.
+- If a test is hard to write, the interface is probably wrong. Revisit the
+  design before hacking around it.
+
+## Code style
+
+- Prefer clarity over cleverness.
+- Functions do one thing. If you need "and" to describe it, split it.
+- No dead code. No commented-out code. No TODOs without an issue reference.
+- Commit messages: imperative mood, under 72 chars, body explains *why*.
+
+## Git workflow
+
+- One logical change per commit.
+- Work on feature branches, never directly on main.
+- Superpowers manages worktrees — follow its conventions.
+
+## When compacting
+
+When summarizing this conversation, preserve:
+- The current plan and its status
+- All files modified and why
+- Decisions made and their rationale
+- Current test status and any failures
 
 ## Alembic migration note
 
-Two migrations share the human-readable title "add tool call fields to messages":
+Two migrations share the title "add tool call fields to messages":
 - `ca316cd7fec5` — adds `tool_calls` (JSONB) and `tool_call_ids` (String)
-- `dc368990e622` — follow-up that renames `tool_call_ids` → `tool_call_id` (singular)
+- `dc368990e622` — renames `tool_call_ids` → `tool_call_id` (singular)
 
-These are chained (`dc368`'s `down_revision = 'ca316cd7fec5'`). Both are intentional and both must stay.
+These are chained (`dc368`'s `down_revision = 'ca316cd7fec5'`). Both are
+intentional and must stay.
