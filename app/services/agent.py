@@ -35,6 +35,13 @@ Guidelines:
 - You can call multiple tools in sequence.
 - If you don't need any tools, just answer directly from your knowledge.
 - Be concise and specific. Cite sources when you use them.
+
+IMPORTANT — Tool synthesis rule:
+After EVERY tool call, you MUST write a complete response to the user that:
+1. Summarizes what the tool found (or explains if it found nothing useful).
+2. Directly answers the user's original question using that information.
+3. Cites URLs when web_search results are used.
+Never end your turn with only tool calls and no text — always follow tool results with a user-facing answer.
 """
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
@@ -173,6 +180,22 @@ async def _run_responses_agent(
         yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
 
         if not pending_calls:
+            if not accumulated_text.strip():
+                if iteration == 0:
+                    input_messages.append({
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "Please summarize your findings and answer my question."}],
+                    })
+                    logger.warning(
+                        "Empty completion (Responses API) on iteration %d — retrying", iteration
+                    )
+                    continue
+                else:
+                    yield {
+                        "type": "assistant_message",
+                        "content": "I wasn't able to generate a response. Please try again.",
+                        "tool_calls": None,
+                    }
             yield {"type": "done"}
             return
 
@@ -363,6 +386,26 @@ async def run_agent(
 
         # Stream is done for this iteration. Now decide: is the agent finished,
         # or does it need to execute tools and loop again?
+
+        # Empty-completion guard: no text and no tool calls = silent done
+        if not accumulated_tool_calls and not accumulated_text.strip():
+            if iteration == 0:
+                # Retry once with a nudge message
+                messages.append({
+                    "role": "user",
+                    "content": "Please summarize your findings and answer my question.",
+                })
+                logger.warning("Empty completion on iteration %d — retrying with nudge", iteration)
+                continue
+            else:
+                # Already retried — yield graceful fallback
+                yield {
+                    "type": "assistant_message",
+                    "content": "I wasn't able to generate a response. Please try again.",
+                    "tool_calls": None,
+                }
+                yield {"type": "done"}
+                return
 
         if not accumulated_tool_calls:
             # No tool calls → this is the final response. Persist and return.

@@ -1,6 +1,14 @@
 import logging
 
 from tavily import AsyncTavilyClient
+from tavily.errors import (
+    InvalidAPIKeyError,
+    UsageLimitExceededError,
+    ForbiddenError,
+    BadRequestError,
+    MissingAPIKeyError,
+    TimeoutError as TavilyTimeoutError,
+)
 
 from app.config import settings
 from app.tools import register_tool
@@ -42,12 +50,28 @@ class WebSearchTool(Tool):
         if not settings.tavily_api_key:
             return "Error: Web search is not configured."
 
-        client = AsyncTavilyClient(api_key=settings.tavily_api_key)
-        response = await client.search(
-            query=query,
-            max_results=max_results,
-            search_depth="basic",  # "basic" is faster/cheaper; "advanced" for deeper research
-        )
+        try:
+            client = AsyncTavilyClient(api_key=settings.tavily_api_key)
+            response = await client.search(
+                query=query,
+                max_results=max_results,
+                search_depth="basic",  # "basic" is faster/cheaper; "advanced" for deeper research
+            )
+        except (InvalidAPIKeyError, MissingAPIKeyError, ForbiddenError):
+            logger.error("Tavily authentication/authorization error", exc_info=True)
+            return "Web search is temporarily unavailable."
+        except UsageLimitExceededError:
+            logger.warning("Tavily usage limit reached", exc_info=True)
+            return "Web search is temporarily unavailable (usage limit reached)."
+        except TavilyTimeoutError:
+            logger.warning("Tavily search timed out", exc_info=True)
+            return "Web search timed out — please try again."
+        except BadRequestError:
+            logger.warning("Tavily bad request for query %r", query, exc_info=True)
+            return f"Web search failed for query: {query!r}. Please try rephrasing."
+        except Exception:
+            logger.error("Unexpected web search error", exc_info=True)
+            return "Web search is temporarily unavailable."
 
         results = response.get("results", [])
         if not results:
