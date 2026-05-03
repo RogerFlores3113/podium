@@ -54,6 +54,8 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [isGuest, setIsGuest] = useState(false);
+  const [byokError, setByokError] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,6 +73,16 @@ export default function ChatPage() {
       }
     } catch {
       // private browsing
+    }
+    // Detect guest session
+    try {
+      const guestToken = sessionStorage.getItem("podium_guest_token");
+      const guestExpires = sessionStorage.getItem("podium_guest_expires");
+      if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
+        setIsGuest(true);
+      }
+    } catch {
+      // sessionStorage unavailable
     }
     // Open sidebar by default on wider screens
     if (window.innerWidth >= 768) setSidebarOpen(true);
@@ -164,6 +176,13 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
       });
+
+      if (response.status === 402) {
+        setByokError(true);
+        setMessages((prev) => prev.slice(0, -1)); // remove the empty assistant placeholder
+        setIsLoading(false);
+        return;
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -403,6 +422,18 @@ export default function ChatPage() {
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
+        {isGuest && (
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #f0f9ff)", color: "var(--text-secondary, #555)" }}>
+            Guest session — your data will be deleted in 24 hours.{" "}
+            <a href="/sign-up" className="underline font-medium">Sign up</a> to keep your work.
+          </div>
+        )}
+        {byokError && (
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #fff8e1)", color: "var(--text-secondary, #555)" }}>
+            Add your OpenAI API key to start chatting.{" "}
+            <a href="/settings" className="underline font-medium">Settings →</a>
+          </div>
+        )}
         <main className="flex flex-col h-full max-w-3xl w-full mx-auto p-4">
           {/* Header */}
           <div

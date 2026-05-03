@@ -5,6 +5,7 @@ from litellm import acompletion
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException
 from app.config import settings
 from app.models import Message, User, ApiKey
 from app.services.tokens import count_tokens
@@ -216,6 +217,21 @@ async def get_user_api_key(
     return decrypted
 
 
-def resolve_api_key(user_key: str | None) -> str:
-    """Return the user's key if available, otherwise the system key."""
-    return user_key or settings.openai_api_key
+def resolve_api_key(user: User, user_key: str | None) -> str:
+    """
+    Return the API key to use for a request.
+
+    Guests always use the system key (cost-controlled via model + rate limits).
+    Authenticated users must have a BYOK key; 402 if they don't.
+    """
+    if user.is_guest:
+        return settings.openai_api_key
+    if not user_key:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "byok_required",
+                "message": "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+            },
+        )
+    return user_key

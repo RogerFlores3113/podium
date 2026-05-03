@@ -24,7 +24,7 @@ resource "aws_cloudwatch_log_group" "app" {
 # Construct the DATABASE_URL from RDS outputs
 locals {
   database_url = "postgresql+asyncpg://${var.db_username}:${var.db_password}@${aws_db_instance.main.endpoint}/assistant"
-  redis_url    = "redis://${aws_elasticache_cluster.main.cache_nodes[0].address}:6379"
+  redis_url    = "redis://${aws_instance.valkey.private_ip}:6379"
 }
 
 # --- API Service ---
@@ -33,8 +33,8 @@ resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project_name}-app"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
@@ -75,6 +75,10 @@ resource "aws_ecs_task_definition" "app" {
         {
           name      = "E2B_API_KEY"
           valueFrom = aws_ssm_parameter.e2b_api_key.arn
+        },
+        {
+          name      = "GUEST_JWT_SECRET"
+          valueFrom = aws_ssm_parameter.guest_jwt_secret.arn
         }
       ]
 
@@ -133,7 +137,7 @@ resource "aws_ecs_task_definition" "worker" {
   family                   = "${var.project_name}-worker"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
+  cpu                      = "256"
   memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn

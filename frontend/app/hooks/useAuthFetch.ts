@@ -8,7 +8,7 @@ export function useAuthFetch() {
 
   return useCallback(
     async (url: string, options: RequestInit = {}): Promise<Response> => {
-      const token = await getToken();
+      const token = await getAuthToken(getToken);
       return fetch(url, {
         ...options,
         headers: {
@@ -19,4 +19,19 @@ export function useAuthFetch() {
     },
     [getToken],
   );
+}
+
+async function getAuthToken(
+  getClerkToken: () => Promise<string | null>,
+): Promise<string | null> {
+  try {
+    const guestToken = sessionStorage.getItem("podium_guest_token");
+    const guestExpires = sessionStorage.getItem("podium_guest_expires");
+    if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
+      return guestToken;
+    }
+  } catch {
+    // sessionStorage unavailable (SSR or private browsing) — fall through
+  }
+  return getClerkToken();
 }

@@ -75,10 +75,17 @@ class Settings(BaseSettings):
     rate_limit_chat_stream: str = "5/minute"
     rate_limit_read: str = "60/minute"
 
+    # Guest sessions
+    guest_jwt_secret: str = ""  # Required in prod. Generate: openssl rand -hex 32
+    guest_session_duration_hours: int = 24
+    guest_max_messages_per_session: int = 20
+
+    # Demo seed corpus — documents visible to all guests
+    seed_user_id: str = "demo_seed"
+
     # Agent / tools
     tavily_api_key: str = ""
     e2b_api_key: str = ""
-    openweathermap_api_key: str = ""
     agent_max_iterations: int = 10
 
     # Memory extraction

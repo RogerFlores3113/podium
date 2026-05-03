@@ -4,6 +4,7 @@ from functools import lru_cache
 import httpx
 import jwt
 from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientError
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,29 +26,42 @@ def get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def verify_clerk_token(token: str) -> dict:
+    """
+    Verify a Clerk RS256 JWT and return its claims.
+
+    Raises jwt.InvalidTokenError on failure (not HTTPException — callers decide).
+    """
+    client = get_jwks_client()
+    signing_key = client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        options={
+            "verify_exp": True,
+            "verify_aud": False,  # Clerk doesn't always set audience
+        },
+    )
+
+
 def verify_token(token: str) -> dict:
     """
-    Verify a Clerk JWT and return its claims.
+    Verify either a Clerk JWT or a guest JWT and return its claims.
 
-    Raises HTTPException if the token is invalid.
+    Tries Clerk first (real users are the common case), falls back to guest HS256.
+    Raises HTTPException(401) if neither succeeds.
     """
     try:
-        client = get_jwks_client()
-        signing_key = client.get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            options={
-                "verify_exp": True,
-                "verify_aud": False,  # Clerk doesn't always set audience
-            },
-        )
-        return claims
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
+        return verify_clerk_token(token)
+    except (jwt.InvalidTokenError, PyJWKClientError):
+        pass
+
+    try:
+        from app.services.guest_auth import verify_guest_token
+        return verify_guest_token(token)
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid token: {e}")
+        logger.warning(f"Invalid token (both Clerk and guest failed): {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
 

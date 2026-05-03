@@ -23,24 +23,23 @@ You have the following tools available:
 - document_search: Search the user's personal document library.
 - web_search: Search the web for current information.
 - url_reader: Fetch and read the full content of any URL.
-- weather: Get current weather for any city.
 - python_executor: Execute Python code for calculations, data analysis, or plotting.
-- image_generation: Generate images from a text description using DALL-E 3.
 - memory_search: Search the user's past memories (things they've told you before).
 
 Guidelines:
 - Use document_search when the user asks about topics that might be in their uploaded documents.
 - Use web_search when the user asks about current events or facts that might have changed recently.
 - Use url_reader when the user shares a link and wants you to read it, or when a web search result needs deeper reading.
-- Use weather when the user asks about current conditions in a specific location.
 - Use python_executor for calculations, data manipulation, or anything that benefits from code.
-- Use image_generation only when the user explicitly asks to create, draw, or generate an image.
 - Use memory_search when you need to recall specific past interactions or context the user mentioned previously.
 - You can call multiple tools in sequence.
 - If you don't need any tools, just answer directly from your knowledge.
 - Be concise and specific. Cite sources when you use them.
-- When image_generation returns a URL, present the image to the user — do not just paste the raw URL.
 """
+
+GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
+    {"document_search", "memory_search", "web_search", "url_reader"}
+)
 
 
 def _to_responses_input(messages: list[dict]) -> list[dict]:
@@ -94,10 +93,11 @@ async def _run_responses_agent(
     responses_tools: list[dict],
     api_key: str,
     model: str,
+    is_guest: bool = False,
 ) -> AsyncGenerator[dict, None]:
     """Agent loop using the OpenAI Responses API (for gpt-5-nano and similar)."""
     client = AsyncOpenAI(api_key=api_key)
-    ctx = ToolContext(user_id=user_id, db=db)
+    ctx = ToolContext(user_id=user_id, db=db, is_guest=is_guest)
 
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Responses API iteration {iteration + 1}/{settings.agent_max_iterations}")
@@ -237,6 +237,7 @@ async def run_agent(
     api_key: str | None = None,
     core_memories_text: str | None = None,
     model: str | None = None,
+    is_guest: bool = False,
 ) -> AsyncGenerator[dict, None]:
     """
     Run the agent loop for a single user message.
@@ -276,8 +277,13 @@ async def run_agent(
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
 
-    tool_schemas = get_tool_schemas()
-    resolved_model = model or settings.chat_model
+    all_schemas = get_tool_schemas()
+    tool_schemas = (
+        [t for t in all_schemas if t["function"]["name"] in GUEST_ALLOWED_TOOLS]
+        if is_guest
+        else all_schemas
+    )
+    resolved_model = "gpt-5-nano" if is_guest else (model or settings.chat_model)
     resolved_api_key = api_key or settings.openai_api_key
 
     # Dispatch to the Responses API loop for models that require it
@@ -285,13 +291,13 @@ async def run_agent(
         input_messages = _to_responses_input(messages)
         responses_tools = _to_responses_tools(tool_schemas) if model_supports_tools(resolved_model) else []
         async for event in _run_responses_agent(
-            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model
+            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model, is_guest
         ):
             yield event
         return
 
     # Build tool context — passed to every tool execution
-    ctx = ToolContext(user_id=user_id, db=db)
+    ctx = ToolContext(user_id=user_id, db=db, is_guest=is_guest)
 
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")

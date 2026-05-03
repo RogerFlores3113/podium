@@ -8,9 +8,7 @@ const TOOL_ICONS: Record<string, string> = {
   document_search: "📄",
   python_executor: "🐍",
   memory_search: "🧠",
-  image_generation: "🎨",
   url_reader: "🔗",
-  weather: "🌤️",
 };
 
 export interface ToolCall {

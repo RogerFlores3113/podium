@@ -56,7 +56,7 @@ def load_file(file_key: str) -> bytes:
         )
         return response["Body"].read()
     else:
-        with open(file_key, "rb") as f:
+        with open(os.path.join(LOCAL_UPLOAD_DIR, file_key), "rb") as f:
             return f.read()
 
 
@@ -77,4 +77,4 @@ def get_local_path(file_key: str) -> str:
         tmp.close()
         return tmp.name
     else:
-        return file_key
+        return os.path.join(LOCAL_UPLOAD_DIR, file_key)

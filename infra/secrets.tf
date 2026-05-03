@@ -47,3 +47,13 @@ resource "aws_ssm_parameter" "e2b_api_key" {
     Name = "${var.project_name}-e2b-api-key"
   }
 }
+
+resource "aws_ssm_parameter" "guest_jwt_secret" {
+  name  = "/${var.project_name}/guest-jwt-secret"
+  type  = "SecureString"
+  value = var.guest_jwt_secret
+
+  tags = {
+    Name = "${var.project_name}-guest-jwt-secret"
+  }
+}

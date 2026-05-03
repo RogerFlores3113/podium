@@ -1,6 +1,9 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
+import { useState } from "react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const CAPABILITIES = [
   { icon: "🧠", title: "Memory", desc: "Learns your preferences and remembers facts across every conversation." },
@@ -13,30 +16,43 @@ const CAPABILITIES = [
 
 export default function LandingPage() {
   const { openSignIn } = useClerk();
+  const [guestLoading, setGuestLoading] = useState(false);
+
+  const handleGuestSession = async () => {
+    if (guestLoading) return;
+    try {
+      // Reuse existing valid session without hitting the API
+      const existingToken = sessionStorage.getItem("podium_guest_token");
+      const existingExpires = sessionStorage.getItem("podium_guest_expires");
+      if (existingToken && existingExpires && new Date(existingExpires) > new Date()) {
+        window.location.href = "/";
+        return;
+      }
+      setGuestLoading(true);
+      const res = await fetch(`${API_URL}/guest/session`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to create guest session");
+      const { token, expires_at } = await res.json();
+      sessionStorage.setItem("podium_guest_token", token);
+      sessionStorage.setItem("podium_guest_expires", expires_at);
+      window.location.href = "/";
+    } catch (err) {
+      console.error("Guest session error:", err);
+      setGuestLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
       {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <span className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Podium</span>
-        <div className="flex items-center gap-4">
-          <a
-            href="https://github.com/RogerFlores3113/podium"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm transition-opacity hover:opacity-70"
-            style={{ color: "var(--text-muted)" }}
-          >
-            GitHub
-          </a>
-          <button
-            onClick={() => openSignIn()}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ background: "var(--accent-warm)", color: "#fff" }}
-          >
-            Sign in
-          </button>
-        </div>
+        <button
+          onClick={() => openSignIn()}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+        >
+          Sign in
+        </button>
       </nav>
 
       {/* Hero */}
@@ -50,27 +66,35 @@ export default function LandingPage() {
         <p className="text-lg mb-10" style={{ color: "var(--text-muted)" }}>
           Memory-first. Document-aware. Runs on your models.
         </p>
-        <div className="flex gap-4">
-          <button
-            onClick={() => openSignIn()}
-            className="px-6 py-3 rounded-lg font-medium text-sm transition-opacity hover:opacity-80"
-            style={{ background: "var(--accent-warm)", color: "#fff" }}
-          >
-            Get started
-          </button>
-          <a
-            href="https://github.com/RogerFlores3113/podium"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-6 py-3 rounded-lg font-medium text-sm transition-opacity hover:opacity-80"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text-primary)",
-            }}
-          >
-            View source
-          </a>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex gap-3">
+            <button
+              onClick={handleGuestSession}
+              disabled={guestLoading}
+              className="px-6 py-3 rounded-lg font-medium text-sm transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--accent-warm)", color: "#fff" }}
+            >
+              {guestLoading ? "Starting session…" : "Try as guest"}
+            </button>
+            <button
+              onClick={() => openSignIn()}
+              className="px-6 py-3 rounded-lg font-medium text-sm transition-opacity hover:opacity-80"
+              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            >
+              Get started
+            </button>
+          </div>
+          <div className="flex items-center gap-4 text-sm" style={{ color: "var(--text-muted)" }}>
+            <span>No sign-up required · Guest sessions expire in 24h</span>
+            <a
+              href="https://github.com/RogerFlores3113/podium"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-opacity hover:opacity-70 underline underline-offset-2"
+            >
+              View source
+            </a>
+          </div>
         </div>
       </section>
 
@@ -99,19 +123,6 @@ export default function LandingPage() {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* Architecture callout */}
-      <section
-        className="mx-8 mb-20 max-w-4xl mx-auto w-full rounded-xl px-8 py-6"
-        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-      >
-        <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--text-muted)" }}>
-          Stack
-        </h2>
-        <p className="text-sm" style={{ color: "var(--text-primary)" }}>
-          FastAPI · pgvector (HNSW) · Next.js 14 · AWS ECS Fargate · RDS PostgreSQL · ElastiCache Redis · Clerk Auth · LiteLLM · arq
-        </p>
       </section>
 
       {/* Footer */}

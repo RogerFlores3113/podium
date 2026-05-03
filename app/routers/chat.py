@@ -4,20 +4,20 @@ import logging
 from sse_starlette.sse import EventSourceResponse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Conversation, Message
+from app.models import Conversation, Message, User
 from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
-from app.services.llm import build_conversation_history, get_user_api_key
+from app.services.llm import build_conversation_history, get_user_api_key, resolve_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
 
 from app.config import settings, AVAILABLE_MODELS, provider_for_model
 from app.limiter import limiter
-from app.auth import get_current_user_id
+from app.auth import get_or_create_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -32,14 +32,14 @@ async def list_models():
 
 @router.get("/", response_model=list[ConversationListItemResponse])
 async def list_conversations(
-    user_id: str = Depends(get_current_user_id),
+    user: User = Depends(get_or_create_user),
     db: AsyncSession = Depends(get_db),
     limit: int = 50,
 ):
     """Return the most recent conversations for the current user."""
     result = await db.execute(
         select(Conversation)
-        .where(Conversation.user_id == user_id)
+        .where(Conversation.user_id == user.clerk_id)
         .order_by(Conversation.created_at.desc())
         .limit(limit)
     )
@@ -49,7 +49,7 @@ async def list_conversations(
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: uuid.UUID,
-    user_id: str = Depends(get_current_user_id),
+    user: User = Depends(get_or_create_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve a conversation with all messages."""
@@ -58,7 +58,7 @@ async def get_conversation(
         .options(selectinload(Conversation.messages))
         .where(
             Conversation.id == conversation_id,
-            Conversation.user_id == user_id,
+            Conversation.user_id == user.clerk_id,
         )
     )
     conversation = result.scalar_one_or_none()
@@ -72,7 +72,7 @@ async def get_conversation(
 async def chat_stream(
     request: Request,
     body: ChatRequest,
-    user_id: str = Depends(get_current_user_id),
+    user: User = Depends(get_or_create_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -87,6 +87,26 @@ async def chat_stream(
       - done: agent finished
       - error: unrecoverable failure
     """
+    user_id = user.clerk_id
+
+    # Enforce guest message cap before doing any DB work
+    if user.is_guest:
+        count_result = await db.execute(
+            select(func.count(Message.id)).where(
+                Message.user_id == user_id,
+                Message.role == "user",
+            )
+        )
+        msg_count = count_result.scalar_one()
+        if msg_count >= settings.guest_max_messages_per_session:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "guest_limit_reached",
+                    "message": f"Guest sessions are limited to {settings.guest_max_messages_per_session} messages. Sign up to keep chatting.",
+                },
+            )
+
     if body.conversation_id:
         result = await db.execute(
             select(Conversation).where(
@@ -120,9 +140,9 @@ async def chat_stream(
             db, conversation.id, settings.memory_max_tokens
         )
 
-    selected_model = body.model or settings.chat_model
-    provider = provider_for_model(selected_model)
+    provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
+    resolved_api_key = resolve_api_key(user, user_api_key)
 
     # Load core memories for prompt injection
     core_memories = await retrieve_core_memories(db, user_id)
@@ -142,9 +162,10 @@ async def chat_stream(
                 user_id=user_id,
                 user_message=body.message,
                 conversation_history=history,
-                api_key=user_api_key,
+                api_key=resolved_api_key,
                 core_memories_text=core_memories_text,
-                model=selected_model,
+                model=body.model or settings.chat_model,
+                is_guest=user.is_guest,
             ):
                 event_type = agent_event["type"]
 

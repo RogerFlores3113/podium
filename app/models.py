@@ -156,6 +156,9 @@ class User(Base):
         String(100), nullable=False, unique=True, index=True
     )
     email: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_guest: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )

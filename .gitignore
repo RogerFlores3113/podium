@@ -220,9 +220,24 @@ alembic/versions/__pycache__/
 
 
 
+# Build artifacts
+dist/
+build/
+
+# Windows download metadata
+*:Zone.Identifier
+
+# IDE
+.vscode/
+.idea/
+
+# Environment files
+.env.local
+.env.production
+
 # Terraform
 infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.backup
 infra/terraform.tfvars
-infra/.terraform.lock.html
+infra/.terraform.lock.hcl

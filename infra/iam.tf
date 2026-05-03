@@ -59,6 +59,7 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
           aws_ssm_parameter.clerk_secret_key.arn,
           aws_ssm_parameter.tavily_api_key.arn,
           aws_ssm_parameter.e2b_api_key.arn,
+          aws_ssm_parameter.guest_jwt_secret.arn,
         ]
       },
       {

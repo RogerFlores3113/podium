@@ -7,44 +7,56 @@ from app.services.ingestion import generate_embeddings
 
 logger = logging.getLogger(__name__)
 
+
 async def retrieve_relevant_chunks(
     db: AsyncSession,
     query: str,
     user_id: str,
     top_k: int | None = None,
+    include_seed: bool = False,
 ) -> list[dict]:
     """
     Embed the query and find the most similar chunks via cosine similarity.
 
     Returns a list of dicts with 'content' and 'similarity' keys.
+    When include_seed=True (guest users), also searches the shared demo corpus.
     """
     top_k = top_k or settings.retrieval_top_k
 
-    # Embed the query
     embeddings = await generate_embeddings([query])
     query_embedding = embeddings[0]
 
-
-    # pgvector cosine distance: <=> operator
-    # Similarity = 1 - distance
-    result = await db.execute(
-        text("""
+    if include_seed:
+        sql = text("""
+            SELECT content, 1 - (embedding <=> :embedding) AS similarity
+            FROM chunks
+            WHERE user_id = :user_id OR user_id = :seed_user_id
+            ORDER BY embedding <=> :embedding
+            LIMIT :top_k
+        """)
+        params = {
+            "embedding": str(query_embedding),
+            "user_id": user_id,
+            "seed_user_id": settings.seed_user_id,
+            "top_k": top_k,
+        }
+    else:
+        sql = text("""
             SELECT content, 1 - (embedding <=> :embedding) AS similarity
             FROM chunks
             WHERE user_id = :user_id
             ORDER BY embedding <=> :embedding
             LIMIT :top_k
-        """),
-        {
+        """)
+        params = {
             "embedding": str(query_embedding),
             "user_id": user_id,
             "top_k": top_k,
-        },
-    )
+        }
 
+    result = await db.execute(sql, params)
     rows = result.fetchall()
 
-    # log
     if rows:
         logger.info(f"Retrieved {len(rows)} chunks for query (top similarity: {rows[0].similarity:.3f})")
     else:

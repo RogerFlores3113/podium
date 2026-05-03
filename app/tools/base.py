@@ -16,6 +16,7 @@ class ToolContext:
     """
     user_id: str
     db: AsyncSession
+    is_guest: bool = False
 
 
 class Tool(ABC):

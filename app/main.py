@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import engine, async_session
 from app.errors import global_exception_handler
 from app.limiter import limiter
-from app.routers import documents, chat, keys, memories
+from app.routers import documents, chat, keys, memories, guest
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.guest_jwt_secret:
+        logger.critical(
+            "GUEST_JWT_SECRET is not set — guest sessions will return 503 until this is configured"
+        )
+
     # Create pgvector extension on startup
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -54,6 +59,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(guest.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(keys.router)
