@@ -102,10 +102,10 @@ async def test_list_models_excludes_ollama_when_url_unset():
 
 
 @pytest.mark.asyncio
-async def test_list_models_includes_ollama_when_url_set():
-    """MODEL-04: list_models() includes Ollama entries when ollama_base_url is set."""
+async def test_list_models_excludes_ollama_regardless_of_url():
+    """MODEL-04: list_models() never includes Ollama — dynamic Ollama roster lives at /ollama-models."""
     with patch("app.routers.chat.settings") as mock_settings:
         mock_settings.ollama_base_url = "http://localhost:11434"
         from app.routers.chat import list_models
         result = await list_models()
-    assert any(m["provider"] == "ollama" for m in result)
+    assert all(m["provider"] != "ollama" for m in result)
