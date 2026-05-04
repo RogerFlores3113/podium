@@ -163,6 +163,31 @@ async def persist_memories(
 
     count = 0
     for mem_data, embedding in zip(memories, embeddings):
+        from sqlalchemy import text as sa_text
+        dup_result = await db.execute(
+            sa_text("""
+                SELECT 1 - (embedding <=> :embedding) AS similarity
+                FROM memories
+                WHERE user_id = :user_id
+                  AND category = :category
+                  AND is_active = true
+                ORDER BY embedding <=> :embedding
+                LIMIT 1
+            """),
+            {
+                "embedding": str(embedding),
+                "user_id": user_id,
+                "category": mem_data["category"],
+            },
+        )
+        dup_row = dup_result.fetchone()
+        if dup_row and dup_row.similarity >= 0.95:
+            logger.info(
+                f"Skipping duplicate memory for user {user_id} "
+                f"(similarity={dup_row.similarity:.3f}): {mem_data['content'][:60]}"
+            )
+            continue
+
         memory = Memory(
             user_id=user_id,
             category=mem_data["category"],
