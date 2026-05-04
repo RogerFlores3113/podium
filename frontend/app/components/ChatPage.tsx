@@ -278,7 +278,12 @@ export default function ChatPage() {
             if (line.startsWith("event: ")) {
               currentEvent = line.slice(7).trim();
             } else if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
+              let data: any;
+              try {
+                data = JSON.parse(line.slice(6));
+              } catch {
+                continue; // skip malformed frames, don't abort the stream
+              }
 
               if (currentEvent === "conversation") {
                 setConversationId(data.conversation_id);
