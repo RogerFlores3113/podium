@@ -71,6 +71,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [selectedEffort, setSelectedEffort] = useState<"fast" | "balanced" | "thorough">("balanced");
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
@@ -92,6 +93,11 @@ export default function ChatPage() {
       }
       const storedModel = localStorage.getItem("selectedModel");
       if (storedModel) setSelectedModel(storedModel);
+      // Phase 10: read persisted effort level
+      const storedEffort = localStorage.getItem("selectedEffort");
+      if (storedEffort === "fast" || storedEffort === "balanced" || storedEffort === "thorough") {
+        setSelectedEffort(storedEffort);
+      }
     } catch {
       // private browsing
     }
@@ -105,22 +111,15 @@ export default function ChatPage() {
     } catch {
       // sessionStorage unavailable
     }
-    // Fetch available models from backend (base list + dynamic Ollama models)
+    // Fetch available base models (unauthenticated). Ollama models are fetched in the
+    // isSignedIn effect — authFetch requires Clerk to have hydrated first.
     void (async () => { try {
       const res = await fetch(`${API_URL}/chat/models`);
       if (!res.ok) return;
       const baseModels = await res.json();
-      let allModels = baseModels;
-      try {
-        const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
-        if (ollamaRes.ok) {
-          const ollamaModels = await ollamaRes.json();
-          if (ollamaModels.length > 0) allModels = [...baseModels, ...ollamaModels];
-        }
-      } catch {}
-      setAvailableModels(allModels);
+      setAvailableModels(baseModels);
       const stored = localStorage.getItem("selectedModel");
-      if (stored && allModels.some((m: { id: string }) => m.id === stored)) {
+      if (stored && baseModels.some((m: { id: string }) => m.id === stored)) {
         setSelectedModel(stored);
       } else if (stored) {
         setSelectedModel(DEFAULT_MODEL);
@@ -177,8 +176,27 @@ export default function ChatPage() {
         sessionStorage.removeItem("podium_guest_expires");
       } catch { /* sessionStorage unavailable */ }
       fetchConversations();
+      // Phase 10 (OLL-01): fetch Ollama models now that Clerk has confirmed auth.
+      // Skip for guests — they do not have BYOK keys configured.
+      if (!isGuest) {
+        void (async () => {
+          try {
+            const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+            if (ollamaRes.ok) {
+              const ollamaModels = await ollamaRes.json();
+              if (ollamaModels.length > 0) {
+                setAvailableModels((prev) => {
+                  const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
+                  return [...base, ...ollamaModels];
+                });
+              }
+            }
+          } catch {}
+        })();
+      }
     }
-  }, [isSignedIn, fetchConversations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn, fetchConversations, authFetch]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -241,7 +259,7 @@ export default function ChatPage() {
       response = await authFetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
+        body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel, effort: selectedEffort }),
       });
     } catch {
       setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
@@ -676,6 +694,26 @@ export default function ChatPage() {
                 {availableModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
+              </select>
+              <select
+                value={selectedEffort}
+                onChange={(e) => {
+                  setSelectedEffort(e.target.value as "fast" | "balanced" | "thorough");
+                  try { localStorage.setItem("selectedEffort", e.target.value); } catch {}
+                }}
+                disabled={isLoading || isGuest}
+                aria-label={isGuest ? "Effort selection unavailable for guest accounts" : "Select effort level"}
+                title={isGuest ? "Effort selection unavailable for guest accounts" : undefined}
+                className="text-xs rounded px-2 py-1 focus:outline-none transition-opacity disabled:opacity-50"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <option value="fast">Fast</option>
+                <option value="balanced">Balanced</option>
+                <option value="thorough">Thorough</option>
               </select>
             </div>
             <div className="flex items-center gap-3">

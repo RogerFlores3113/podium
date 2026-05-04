@@ -451,9 +451,6 @@ describe("ChatPage tool phase copy", () => {
   it("renders 'Searching the web…' while web_search is running", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     // Stream emits start but no result — leave open so the running state persists
     fetchSpy.mockResolvedValueOnce(
@@ -483,9 +480,6 @@ describe("ChatPage tool phase copy", () => {
   it("removes the tool phase copy once tool_call_result lands", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     // Open stream — emit start (running), then result (done), then close.
     fetchSpy.mockResolvedValueOnce(
@@ -547,9 +541,6 @@ describe("ChatPage SSE error event", () => {
   it("renders an error bubble when backend emits event: error", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -573,9 +564,6 @@ describe("ChatPage SSE error event", () => {
   it("preserves partial assistant content when error arrives after tokens", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -617,9 +605,6 @@ describe("ChatPage HTTP error responses", () => {
   it("renders BYOK error bubble on HTTP 402", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -643,9 +628,6 @@ describe("ChatPage HTTP error responses", () => {
   it("renders guest-limit error bubble on HTTP 429 using backend message when present", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -986,9 +968,6 @@ describe("ChatPage BYOK provider-correct copy", () => {
 
   it("shows provider-correct copy from 402 detail.message", async () => {
     mockMountFetches(fetchSpy, []);
-    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
-    // removed in Plan 02 when fetch moves to the isSignedIn effect.
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     const byokBody = JSON.stringify({
       detail: {
         error: "byok_required",
@@ -1055,6 +1034,7 @@ describe("effort selector", () => {
     mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -1062,12 +1042,11 @@ describe("effort selector", () => {
     vi.unstubAllGlobals();
     cleanup();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("renders a <select> with Fast, Balanced, Thorough options defaulting to Balanced", async () => {
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
@@ -1082,8 +1061,6 @@ describe("effort selector", () => {
   it("persists selected effort to localStorage on change", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
@@ -1096,8 +1073,6 @@ describe("effort selector", () => {
   it("reads selectedEffort from localStorage on mount", async () => {
     localStorage.setItem("selectedEffort", "thorough");
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
@@ -1108,8 +1083,6 @@ describe("effort selector", () => {
   it("ignores invalid localStorage values and defaults to balanced", async () => {
     localStorage.setItem("selectedEffort", "invalid-value");
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
@@ -1124,8 +1097,6 @@ describe("effort selector", () => {
       new Date(Date.now() + 86400000).toISOString(),
     );
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
@@ -1138,8 +1109,6 @@ describe("effort selector", () => {
   it("includes effort in the POST body when a message is submitted", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     // Stream response for the submit
     fetchSpy.mockResolvedValueOnce(
@@ -1209,22 +1178,21 @@ describe("ollama model fetch timing", () => {
     mockIsSignedIn = undefined;
     mockMountFetches(fetchSpy);
 
-    // Slot 3: ollama-models — fires when isSignedIn effect runs
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify([{ id: "ollama/llama3", label: "llama3 (local)", provider: "ollama" }]),
-        { status: 200 },
-      ),
-    );
-
     const { rerender } = render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
     // Simulate Clerk confirming sign-in
     mockIsSignedIn = true;
-    // Also need conversations slot for the fetchConversations call in isSignedIn effect
+    // isSignedIn effect fires fetchConversations first, then ollama fetch — match that order
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 }),
+    );
+    // Slot for ollama-models — fires after fetchConversations in isSignedIn effect
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([{ id: "ollama/llama3", label: "llama3 (local)", provider: "ollama" }]),
+        { status: 200 },
+      ),
     );
     rerender(<ChatPage />);
 
@@ -1244,8 +1212,6 @@ describe("ollama model fetch timing", () => {
     );
     mockIsSignedIn = undefined;
     mockMountFetches(fetchSpy);
-    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     const { rerender } = render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
@@ -1269,20 +1235,20 @@ describe("ollama model fetch timing", () => {
     mockIsSignedIn = undefined;
     mockMountFetches(fetchSpy);
 
+    const { rerender } = render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    mockIsSignedIn = true;
+    // isSignedIn effect fires fetchConversations first, then ollama fetch — match that order
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
     // Ollama fetch returns one model
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([{ id: "ollama/llama3", label: "llama3 (local)", provider: "ollama" }]),
         { status: 200 },
       ),
-    );
-
-    const { rerender } = render(<ChatPage />);
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-
-    mockIsSignedIn = true;
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify([]), { status: 200 }),
     );
     rerender(<ChatPage />);
 
