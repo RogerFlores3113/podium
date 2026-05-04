@@ -143,8 +143,9 @@ async def chat_stream(
     """
     user_id = user.clerk_id
 
-    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models)
-    if body.model:
+    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models).
+    # Skip validation for Ollama models — list_models() only returns non-Ollama models.
+    if body.model and not body.model.startswith("ollama/"):
         active_model_ids = {m["id"] for m in await list_models()}
         if body.model not in active_model_ids:
             raise HTTPException(status_code=422, detail="Model not available")
@@ -312,6 +313,7 @@ async def chat_stream(
                     }
         except Exception as e:
             logger.error(f"Chat stream failed: {e}", exc_info=True)
+            await db.rollback()
             yield {
                 "event": "error",
                 "data": json.dumps({"detail": str(e)}),
