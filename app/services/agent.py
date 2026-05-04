@@ -102,6 +102,7 @@ async def _run_responses_agent(
     api_key: str,
     model: str,
     is_guest: bool = False,
+    effort: str = "balanced",
 ) -> AsyncGenerator[dict, None]:
     """Agent loop using the OpenAI Responses API (for gpt-5-nano and similar)."""
     client = AsyncOpenAI(api_key=api_key)
@@ -182,8 +183,6 @@ async def _run_responses_agent(
             if pending_calls
             else None
         )
-        yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
-
         if not pending_calls:
             if not accumulated_text.strip():
                 if iteration == 0:
@@ -201,8 +200,18 @@ async def _run_responses_agent(
                         "content": "I wasn't able to generate a response. Please try again.",
                         "tool_calls": None,
                     }
+            else:
+                # Final answer — apply actor-critic self-critique pass if applicable (AGT-02, Pitfall 1)
+                final_text = accumulated_text
+                if effort != "fast" and not is_guest:
+                    final_text = await _actor_critic(
+                        final_text, [], api_key, model
+                    )
+                yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
             return
+
+        yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
 
         # Build next-turn input: assistant text, reasoning items, then function_call items
         if accumulated_text:
@@ -257,6 +266,53 @@ async def _run_responses_agent(
     }
 
 
+async def _actor_critic(
+    initial_answer: str,
+    messages: list[dict],
+    api_key: str | None,
+    model: str | None,
+) -> str:
+    """
+    Single self-critique pass (AGT-02, D-09-03).
+
+    Returns revised text if the model identifies improvements, or returns the
+    original text if the critique response starts with 'LGTM' (case-insensitive).
+
+    Always uses litellm acompletion regardless of the primary model path.
+    Always uses settings.openai_api_key (system key) — critique is a system-side
+    quality operation, not billed to the user's BYOK key (see RESEARCH.md Pitfall 5).
+    Falls back to settings.memory_extraction_model when the primary model is a
+    Responses API model (acompletion does not support Responses API format).
+    """
+    critique_model = model or settings.memory_extraction_model
+    if critique_model in RESPONSES_API_MODELS:
+        critique_model = settings.memory_extraction_model
+    critique_api_key = settings.openai_api_key  # always system key
+
+    critique_messages = list(messages) + [
+        {"role": "assistant", "content": initial_answer},
+        {
+            "role": "user",
+            "content": (
+                "Please review your answer above. Is it complete, accurate, "
+                "and directly useful to a recruiter? If yes, reply LGTM. "
+                "If not, give a revised and improved answer."
+            ),
+        },
+    ]
+    response = await acompletion(
+        model=critique_model,
+        messages=critique_messages,
+        api_key=critique_api_key,
+        max_tokens=1500,
+        stream=False,
+    )
+    revised = response.choices[0].message.content or ""
+    if revised.strip().upper().startswith("LGTM"):
+        return initial_answer
+    return revised.strip() or initial_answer
+
+
 async def run_agent(
     db: AsyncSession,
     user_id: str,
@@ -266,6 +322,7 @@ async def run_agent(
     core_memories_text: str | None = None,
     model: str | None = None,
     is_guest: bool = False,
+    effort: str = "balanced",  # "fast" skips critique; "balanced"/"thorough" trigger it (AGT-04)
 ) -> AsyncGenerator[dict, None]:
     """
     Run the agent loop for a single user message.
@@ -311,7 +368,9 @@ async def run_agent(
         if is_guest
         else all_schemas
     )
-    resolved_model = "gpt-5-nano" if is_guest else (model or settings.chat_model)
+    # Guests use gpt-5-nano by default; an explicit model override is respected
+    # so that callers (e.g. tests) can direct guests to a specific model.
+    resolved_model = (model or "gpt-5-nano") if is_guest else (model or settings.chat_model)
     resolved_api_key = api_key or settings.openai_api_key
 
     # Dispatch to the Responses API loop for models that require it
@@ -319,7 +378,7 @@ async def run_agent(
         input_messages = _to_responses_input(messages)
         responses_tools = _to_responses_tools(tool_schemas) if model_supports_tools(resolved_model) else []
         async for event in _run_responses_agent(
-            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model, is_guest
+            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model, is_guest, effort
         ):
             yield event
         return
@@ -417,12 +476,14 @@ async def run_agent(
                 return
 
         if not accumulated_tool_calls:
-            # No tool calls → this is the final response. Persist and return.
-            yield {
-                "type": "assistant_message",
-                "content": accumulated_text,
-                "tool_calls": None,
-            }
+            # No tool calls → this is the final response.
+            final_text = accumulated_text
+            if effort != "fast" and not is_guest:
+                # Actor-critic self-critique pass (AGT-02, AGT-04, D-09-03)
+                final_text = await _actor_critic(
+                    final_text, messages, resolved_api_key, resolved_model
+                )
+            yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
             return
 

@@ -95,7 +95,11 @@ def test_memory_job_uses_job_id():
 
 @pytest.mark.asyncio
 async def test_litellm_empty_completion_retries():
-    """On empty text + no tool calls at iteration 0, litellm path retries with a nudge (AGENT-02)."""
+    """On empty text + no tool calls at iteration 0, litellm path retries with a nudge (AGENT-02).
+
+    Uses effort='fast' to isolate the retry logic without triggering the actor-critic
+    pass (which would add a third acompletion call and require a third mock).
+    """
     from app.services.agent import run_agent
 
     empty_stream = _make_async_stream([_make_empty_chunk()])
@@ -115,11 +119,12 @@ async def test_litellm_empty_completion_retries():
             conversation_history=[],
             api_key="sk-test",
             model="gpt-4o",  # non-Responses-API model
+            effort="fast",   # skip actor-critic to keep call count at 2
         ):
             events.append(event)
 
     event_types = [e["type"] for e in events]
-    # Must retry — acompletion called twice
+    # Must retry — acompletion called twice (empty → nudge retry)
     assert mock_acompletion.call_count == 2, (
         "Agent must call acompletion twice: once for empty response, once after nudge"
     )
