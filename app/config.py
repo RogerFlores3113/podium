@@ -1,5 +1,12 @@
 from pydantic_settings import BaseSettings
 
+# Origins allowed by CORSMiddleware. Referenced here so errors.py can add
+# CORS headers to 500 responses without duplicating the list.
+CORS_ORIGINS = [
+    "http://localhost:3000",
+    "https://podium-beta.vercel.app",
+    "http://localhost:8000",
+]
 
 # Models available for selection. Provider drives which BYOK key is used.
 AVAILABLE_MODELS: list[dict] = [

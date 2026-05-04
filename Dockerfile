@@ -19,5 +19,5 @@ COPY app/ app/
 COPY alembic/ alembic/
 COPY alembic.ini .
 
-# Run
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run migrations then start server (DB must be healthy before compose starts this container)
+CMD ["sh", "-c", "uv run alembic upgrade head && exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"]
