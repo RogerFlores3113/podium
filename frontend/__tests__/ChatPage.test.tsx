@@ -46,27 +46,27 @@ function mockConversationList(
 }
 
 /**
- * Mocks all 3 on-mount fetches so the chat/stream call can receive its own mock.
- * Phase 5 added dynamic model fetching: /chat/models (unauthenticated) fires first,
- * then /chat/ (conversations) and /chat/ollama-models (via authFetch) follow.
- * Tests that submit a message need a 4th mock slot for the chat/stream response.
+ * Mocks the 2 on-mount fetches for ChatPage.
+ * Phase 10 moved the Ollama models fetch out of the mount effect and into the
+ * isSignedIn effect — so only 2 slots fire at mount time:
+ *   Slot 1: /chat/models (unauthenticated)
+ *   Slot 2: /chat/ conversations (authFetch)
+ * Tests that trigger isSignedIn=true must add a 3rd slot for /chat/ollama-models.
+ * Tests that submit a message need an additional slot for /chat/stream.
  */
 function mockMountFetches(
   fetchSpy: ReturnType<typeof vi.spyOn>,
   convs: unknown[] = [CONV_1, CONV_2],
 ) {
-  // Slot 1: /chat/models (unauthenticated fetch, fires first in useEffect)
+  // Slot 1: /chat/models (unauthenticated fetch, fires first in mount useEffect)
   fetchSpy.mockResolvedValueOnce(
     new Response(JSON.stringify([{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }]), { status: 200 }),
   );
-  // Slot 2: /chat/ conversations (authFetch, fires after one getToken microtask)
+  // Slot 2: /chat/ conversations (authFetch, fires via fetchConversations)
   fetchSpy.mockResolvedValueOnce(
     new Response(JSON.stringify(convs), { status: 200 }),
   );
-  // Slot 3: /chat/ollama-models (authFetch, fires after /chat/models resolves)
-  fetchSpy.mockResolvedValueOnce(
-    new Response(JSON.stringify([]), { status: 200 }),
-  );
+  // NOTE: /chat/ollama-models now fires in the isSignedIn effect, not here.
 }
 
 function makeSSEResponse(
@@ -451,6 +451,9 @@ describe("ChatPage tool phase copy", () => {
   it("renders 'Searching the web…' while web_search is running", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     // Stream emits start but no result — leave open so the running state persists
     fetchSpy.mockResolvedValueOnce(
@@ -480,6 +483,9 @@ describe("ChatPage tool phase copy", () => {
   it("removes the tool phase copy once tool_call_result lands", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     // Open stream — emit start (running), then result (done), then close.
     fetchSpy.mockResolvedValueOnce(
@@ -541,6 +547,9 @@ describe("ChatPage SSE error event", () => {
   it("renders an error bubble when backend emits event: error", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -564,6 +573,9 @@ describe("ChatPage SSE error event", () => {
   it("preserves partial assistant content when error arrives after tokens", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -605,6 +617,9 @@ describe("ChatPage HTTP error responses", () => {
   it("renders BYOK error bubble on HTTP 402", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -628,6 +643,9 @@ describe("ChatPage HTTP error responses", () => {
   it("renders guest-limit error bubble on HTTP 429 using backend message when present", async () => {
     const user = userEvent.setup();
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -968,6 +986,9 @@ describe("ChatPage BYOK provider-correct copy", () => {
 
   it("shows provider-correct copy from 402 detail.message", async () => {
     mockMountFetches(fetchSpy, []);
+    // Slot 3 (temporary): /chat/ollama-models — still fires at mount in Plan 01;
+    // removed in Plan 02 when fetch moves to the isSignedIn effect.
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     const byokBody = JSON.stringify({
       detail: {
         error: "byok_required",

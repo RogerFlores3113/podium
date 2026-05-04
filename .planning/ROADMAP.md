@@ -196,8 +196,13 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. The chat UI exposes a Fast / Balanced / Thorough effort selector; the selected level is sent with each request and visibly affects response depth (Fast produces quicker, less-elaborated answers; Thorough produces longer, self-critiqued answers).
   2. After a user saves an OLLAMA_BASE_URL in settings, the model picker immediately renders the available Ollama models fetched from that endpoint — no page reload required, and no auth-timing errors on the fetch.
-**Plans:** TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 10-01-PLAN.md — Write RED failing tests for AGT-03 and OLL-01; update mockMountFetches to 2-slot order (Wave 1)
+- [ ] 10-02-PLAN.md — Implement effort selector and Ollama fetch timing fix in ChatPage.tsx (Wave 2)
+- [ ] 10-03-PLAN.md — Full suite verification gate + human UAT checkpoint (Wave 3)
 
 ## Coverage
 
