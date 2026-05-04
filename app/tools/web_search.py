@@ -44,7 +44,7 @@ class WebSearchTool(Tool):
 
     async def execute(self, ctx: ToolContext, args: dict) -> str:
         query = args["query"]
-        max_results = args.get("max_results", 5)
+        max_results = max(1, min(10, args.get("max_results", 5)))
 
         logger.info(f"Web search: {query}")
 

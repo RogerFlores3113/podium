@@ -37,7 +37,7 @@ class MemorySearchTool(Tool):
 
     async def execute(self, ctx: ToolContext, args: dict) -> str:
         query = args["query"]
-        top_k = args.get("top_k", 5)
+        top_k = max(1, min(10, args.get("top_k", 5)))
 
         logger.info(f"Memory search: {query} (user={ctx.user_id})")
 
