@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+// Stable getToken reference — must not be re-created on each useAuth() call
+// or authFetch's useCallback dep changes on every render, causing ∞ fetchConversations loop
+const stableGetToken = vi.fn().mockResolvedValue("test-token");
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
-    getToken: vi.fn().mockResolvedValue("test-token"),
+    getToken: stableGetToken,
   }),
   UserButton: () => <div data-testid="user-button" />,
 }));
@@ -49,6 +52,8 @@ describe("ChatPage sidebar delete", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
   });
 
   it("× button is hidden when row is not hovered", async () => {
@@ -73,7 +78,8 @@ describe("ChatPage sidebar delete", () => {
 
     // Hover the conversation row — in Wave 2 this sets hoveredConvId
     // Today this fails because there is no element with title="Delete conversation"
-    const row = screen.getByText("First chat").closest("button") as HTMLElement;
+    // Row is <div role="button"> after restructure (fixes nested-button HTML invalidity)
+    const row = screen.getByText("First chat").closest('[role="button"], button') as HTMLElement;
     await user.hover(row);
 
     // Fails today: no × button rendered — RED assertion
@@ -94,11 +100,14 @@ describe("ChatPage sidebar delete", () => {
 
     await waitFor(() => screen.getByText("First chat"));
 
-    const row = screen.getByText("First chat").closest("button") as HTMLElement;
+    const row = screen.getByText("First chat").closest('[role="button"], button') as HTMLElement;
     await user.hover(row);
 
     // Fails today: no × button — RED
-    const deleteBtn = screen.getByTitle("Delete conversation");
+    // Hover the × button explicitly so hover state is set on the button itself
+    // (jsdom fires mouseleave on outer div when pointer moves to child — needs re-entry)
+    await user.hover(screen.getByTitle("Delete conversation"));
+    const deleteBtn = screen.getByTitle("Delete conversation"); // fresh ref after re-render
     await user.click(deleteBtn);
 
     expect(confirmMock).toHaveBeenCalledOnce();
@@ -131,11 +140,12 @@ describe("ChatPage sidebar delete", () => {
       })
     );
 
-    const row = screen.getByText("First chat").closest("button") as HTMLElement;
+    const row = screen.getByText("First chat").closest('[role="button"], button') as HTMLElement;
     await user.hover(row);
 
     // Fails today: no × button — RED
-    const deleteBtn = screen.getByTitle("Delete conversation");
+    await user.hover(screen.getByTitle("Delete conversation"));
+    const deleteBtn = screen.getByTitle("Delete conversation"); // fresh ref after re-render
     await user.click(deleteBtn);
 
     // Wait for the row to leave the DOM
@@ -197,11 +207,12 @@ describe("ChatPage sidebar delete", () => {
       new Response(JSON.stringify([CONV_2]), { status: 200 })
     );
 
-    const convRow = screen.getByText("First chat").closest("button") as HTMLElement;
+    const convRow = screen.getByText("First chat").closest('[role="button"], button') as HTMLElement;
     await user.hover(convRow);
 
     // Fails today: no × button — RED
-    const deleteBtn = screen.getByTitle("Delete conversation");
+    await user.hover(screen.getByTitle("Delete conversation"));
+    const deleteBtn = screen.getByTitle("Delete conversation"); // fresh ref after re-render
     await user.click(deleteBtn);
 
     // After deleting the active conversation, startNewConversation resets state
@@ -225,11 +236,12 @@ describe("ChatPage sidebar delete", () => {
     // Record fetch calls before hovering/clicking
     const fetchCallsBefore = fetchSpy.mock.calls.length;
 
-    const row = screen.getByText("Second chat").closest("button") as HTMLElement;
+    const row = screen.getByText("Second chat").closest('[role="button"], button') as HTMLElement;
     await user.hover(row);
 
     // Fails today: no × button — RED
-    const deleteBtn = screen.getByTitle("Delete conversation");
+    await user.hover(screen.getByTitle("Delete conversation"));
+    const deleteBtn = screen.getByTitle("Delete conversation"); // fresh ref after re-render
     await user.click(deleteBtn);
 
     // e.stopPropagation() prevents loadConversation — no GET to /chat/c2
