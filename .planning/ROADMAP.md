@@ -133,7 +133,7 @@ Coverage (v1.0):
 
 - [x] **Phase 7: Backend Debt & Security** — Eliminate the guest API key leak, harden SSE stream teardown, and fix the Ollama localhost URL rewrite.
 - [x] **Phase 8: Frontend Bugs & Polish** — Fix all four UI bugs, surface the BYOK 402 provider-correct message, and ship markdown rendering with in-progress indicators. (completed 2026-05-04)
-- [ ] **Phase 9: Memory & Agent Core** — Add `memory_save` tool, update system prompt with memory guidance, audit all agent prompts, and implement the actor-critic self-critique pass.
+- [x] **Phase 9: Memory & Agent Core** — Add `memory_save` tool, update system prompt with memory guidance, audit all agent prompts, and implement the actor-critic self-critique pass. (completed 2026-05-04)
 - [ ] **Phase 10: Agent UI & Dynamic Ollama** — Expose the Effort slider in the UI and wire up the dynamic Ollama model list in the picker.
 
 ## Phase Details
@@ -236,7 +236,7 @@ Plans:
 | 6. PR #14 Audit & Smoke Test | v1.0 | 4/4 | Complete | 2026-05-04 |
 | 7. Backend Debt & Security | v2.0 | 1/1 | Complete    | 2026-05-04 |
 | 8. Frontend Bugs & Polish | v2.0 | 2/2 | Complete    | 2026-05-04 |
-| 9. Memory & Agent Core | v2.0 | 0/TBD | Not started | - |
+| 9. Memory & Agent Core | v2.0 | 4/4 | Complete    | 2026-05-04 |
 | 10. Agent UI & Dynamic Ollama | v2.0 | 0/TBD | Not started | - |
 
 ---

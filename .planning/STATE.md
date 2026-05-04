@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Polish, Reliability & AI Upgrade
-status: executing
-last_updated: "2026-05-04T11:00:00.000Z"
-last_activity: 2026-05-04 -- Phase 7 Plan 1 complete (OLL-02 + DEBT-01/02 verified)
+status: Ready for Phase 9
+last_updated: "2026-05-04T10:56:01.371Z"
+last_activity: 2026-05-04
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 1
   completed_plans: 1
-  percent: 25
+  percent: 100
 ---
 
 # Project State
@@ -20,23 +20,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** A recruiter can ask a question and get a fast, reliable, clearly-presented answer with no silent failures.
-**Current focus:** Phase 7 — Backend Debt & Security
+**Current focus:** Phase 9 — Memory & Agent Core
 
 ## Phase Status
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Backend Debt & Security | 1/1 | Complete | 2026-05-04 |
-| 8. Frontend Bugs & Polish | 0/TBD | Not started | - |
-| 9. Memory & Agent Core | 0/TBD | Not started | - |
+| 8. Frontend Bugs & Polish | 2/2 | Complete | 2026-05-04 |
+| 9. Memory & Agent Core | 4/4 | Complete | 2026-05-04 |
 | 10. Agent UI & Dynamic Ollama | 0/TBD | Not started | - |
 
 ## Current Position
 
-Phase: 7 (Backend Debt & Security) — COMPLETE
-Plan: 1 of 1 (done)
-Status: Ready for Phase 8
-Last activity: 2026-05-04 -- Phase 7 Plan 1 complete (OLL-02 + DEBT-01/02 verified)
+Phase: 9
+Plan: 4/4
+Status: Ready for Phase 10
+Last activity: 2026-05-04
 
 ## Accumulated Context
 
@@ -80,4 +80,4 @@ Last activity: 2026-05-04 -- Phase 7 Plan 1 complete (OLL-02 + DEBT-01/02 verifi
 
 ## Last Updated
 
-2026-05-04 — Phase 7 Plan 1 complete. OLL-02 (normalize_ollama_url) implemented and wired at agent.py:340 + chat.py:41. DEBT-01 and DEBT-02 verified still in place via grep + 11 passing byok-and-guest-guards tests + git log provenance (commits c0d49a6, 298892c). Full suite: 76 passed. 4 commits: a4d68d0 → cb39955 → bcd2739 → 1b9c32b.
+2026-05-04 — Phase 9 context gathered (auto mode). memory_save tool, actor-critic, effort field decisions locked. 2 plans, 1 wave. UI-01/02/03/04, DEBT-03, UX-01/02/03 implemented. 57/57 tests passing (5 new: UI-02 hamburger, UI-03 guest cleanup, UI-04 no generate images, DEBT-03 BYOK provider copy, UX-01 synthesis gap indicator). Key commits: 403fed2 → 3c9fd61 → a584ec2 (08-01) + d5fa95e (08-02). Human UAT pending for 6 visual/behavioral checks.

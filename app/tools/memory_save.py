@@ -1,6 +1,5 @@
 """Tool for saving a memory to the user's long-term memory store (MEM-01)."""
 import logging
-import uuid
 
 from app.services.memory import persist_memories
 from app.tools import register_tool
@@ -46,6 +45,8 @@ class MemorySaveTool(Tool):
 
     async def execute(self, ctx: ToolContext, args: dict) -> str:
         fact = args["fact"].strip()
+        if not fact:
+            return "Error: fact must be a non-empty string."
         category = args.get("category", "context")
         if category not in _VALID_CATEGORIES:
             # Normalize unrecognized LLM-supplied categories to avoid storage silently
