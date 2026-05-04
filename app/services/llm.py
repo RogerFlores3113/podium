@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+from urllib.parse import urlparse, urlunparse
 
 from litellm import acompletion
 from sqlalchemy import select
@@ -175,3 +177,31 @@ def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str
             },
         )
     return user_key
+
+
+def normalize_ollama_url(url: str) -> str:
+    """
+    Rewrite localhost-based Ollama URLs to host.docker.internal when
+    running inside Docker (detected via /.dockerenv).
+
+    No-op cases (returned unchanged):
+      - empty string
+      - not running in Docker (/.dockerenv missing)
+      - hostname is not localhost / 127.0.0.1 / ::1
+
+    Handles http://localhost:PORT, http://localhost/, http://localhost
+    (no path), and IPv4/IPv6 loopback variants. Preserves scheme, port,
+    path, query, and fragment via urllib.parse.
+    """
+    if not url:
+        return url
+    if not os.path.exists("/.dockerenv"):
+        return url
+    parsed = urlparse(url)
+    if parsed.hostname in ("localhost", "127.0.0.1", "::1"):
+        new_netloc = parsed.netloc.replace(
+            parsed.hostname, "host.docker.internal", 1
+        )
+        parsed = parsed._replace(netloc=new_netloc)
+        return urlunparse(parsed)
+    return url
