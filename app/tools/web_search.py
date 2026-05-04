@@ -75,7 +75,7 @@ class WebSearchTool(Tool):
 
         results = response.get("results", [])
         if not results:
-            return f"No results found for: {query}"
+            return "No results found for that query."
 
         # Format results as a readable string for the LLM.
         # We include title, URL, and content snippet — the LLM will cite URLs
