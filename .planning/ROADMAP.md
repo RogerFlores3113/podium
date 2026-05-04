@@ -10,9 +10,9 @@
 
 - [x] **Phase 1: Wire Protocol & Visibility** — Fix SSE delimiter, persistence, redis pool, and remove dead code so failures stop being silent. *(completed 2026-05-03)*
 - [x] **Phase 2: Agent Reliability** — Harden the agent loop so tool results are always synthesized and reported to the user. *(completed 2026-05-03)*
-- [ ] **Phase 3: Destructive UX Paths** — Make conversation and memory deletion actually work end-to-end with clear feedback.
-- [ ] **Phase 4: Loading & Error UX** — Surface thinking, tool-in-progress, and error states inline in the chat thread.
-- [ ] **Phase 5: Model Roster & Ollama** — Restrict roster to approved models, gate guests, and add Ollama as a dev/power-user opt-in.
+- [x] **Phase 3: Destructive UX Paths** — Make conversation and memory deletion actually work end-to-end with clear feedback. *(completed 2026-05-03)*
+- [x] **Phase 4: Loading & Error UX** — Surface thinking, tool-in-progress, and error states inline in the chat thread. *(completed 2026-05-03)*
+- [x] **Phase 5: Model Roster & Ollama** — Restrict roster to approved models, gate guests, and add Ollama as a dev/power-user opt-in. *(completed 2026-05-03)*
 - [ ] **Phase 6: PR #14 Audit & Smoke Test** — Verify guest mode, intro flow, and AWS changes still work after all prior phases.
 
 ## Phase Details
@@ -91,7 +91,16 @@ Plans:
   1. A guest session can be created, can send messages up to the cap (and is blocked cleanly past it), can see the demo corpus, and is cleaned up on expiry.
   2. The landing/intro flow renders cleanly for both signed-out and signed-in users with no broken states and the auth gate behaving correctly.
   3. The AWS infrastructure changes shipped in PR #14 are verified against current usage — cost/efficiency claims hold and no regressions are observed in ECS, RDS, or Valkey behavior.
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+- [x] 06-01-PLAN.md — Wave 0 RED: write 7 failing tests for AUDIT-01 gaps + CR-02 + CR-04
+- [ ] 06-02-PLAN.md — Wave 1 GREEN backend: fix CR-01, CR-02, CR-04
+- [ ] 06-03-PLAN.md — Wave 1 GREEN frontend: fix CR-03 (SSE JSON.parse guard)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-04-PLAN.md — Wave 2: AUDIT-02/03 manual checklist + phase SUMMARY + STATE/ROADMAP close-out
 **UI hint**: yes
 
 ## Coverage
@@ -135,12 +144,12 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Wire Protocol & Visibility | 3/3 | Complete | 2026-05-03 |
-| 2. Agent Reliability | 0/3 | Planned | — |
-| 3. Destructive UX Paths | 0/0 | Not started | — |
-| 4. Loading & Error UX | 0/0 | Not started | — |
-| 5. Model Roster & Ollama | 0/0 | Not started | — |
+| 2. Agent Reliability | 3/3 | Complete | 2026-05-03 |
+| 3. Destructive UX Paths | 3/3 | Complete | 2026-05-03 |
+| 4. Loading & Error UX | 3/3 | Complete | 2026-05-03 |
+| 5. Model Roster & Ollama | 3/3 | Complete | 2026-05-03 |
 | 6. PR #14 Audit & Smoke Test | 0/0 | Not started | — |
 
 ---
 *Roadmap defined: 2026-05-03*
-*Last updated: 2026-05-03 — Phase 2 planned (3 plans, 2 waves)*
+*Last updated: 2026-05-03 — Phase 5 complete (3 plans, 64 tests green)*

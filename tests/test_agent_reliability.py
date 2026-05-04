@@ -327,7 +327,7 @@ async def test_get_or_create_user_race_condition():
 
     result = await get_or_create_user.__wrapped__("user_abc", db) if hasattr(get_or_create_user, "__wrapped__") else await get_or_create_user("user_abc", db)
 
-    db.rollback.assert_awaited_once(), "Must call rollback after IntegrityError"
+    db.rollback.assert_awaited_once()  # Must call rollback after IntegrityError
     assert result is existing_user, "Must return the existing user found by re-select"
 
 
