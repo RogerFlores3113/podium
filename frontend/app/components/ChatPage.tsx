@@ -235,7 +235,12 @@ export default function ChatPage() {
 
     if (response.status === 402) {
       setByokError(true);
-      setMessages((prev) => [...prev, { role: "error", kind: "byok", content: ERROR_COPY.byok }]);
+      let copy = ERROR_COPY.byok;
+      try {
+        const body = await response.json();
+        if (body?.detail?.message) copy = body.detail.message;
+      } catch { /* use generic copy */ }
+      setMessages((prev) => [...prev, { role: "error", kind: "byok", content: copy }]);
       setIsThinking(false);
       setIsLoading(false);
       return;
