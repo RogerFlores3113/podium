@@ -43,6 +43,30 @@ function mockConversationList(
   );
 }
 
+/**
+ * Mocks all 3 on-mount fetches so the chat/stream call can receive its own mock.
+ * Phase 5 added dynamic model fetching: /chat/models (unauthenticated) fires first,
+ * then /chat/ (conversations) and /chat/ollama-models (via authFetch) follow.
+ * Tests that submit a message need a 4th mock slot for the chat/stream response.
+ */
+function mockMountFetches(
+  fetchSpy: ReturnType<typeof vi.spyOn>,
+  convs: unknown[] = [CONV_1, CONV_2],
+) {
+  // Slot 1: /chat/models (unauthenticated fetch, fires first in useEffect)
+  fetchSpy.mockResolvedValueOnce(
+    new Response(JSON.stringify([{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }]), { status: 200 }),
+  );
+  // Slot 2: /chat/ conversations (authFetch, fires after one getToken microtask)
+  fetchSpy.mockResolvedValueOnce(
+    new Response(JSON.stringify(convs), { status: 200 }),
+  );
+  // Slot 3: /chat/ollama-models (authFetch, fires after /chat/models resolves)
+  fetchSpy.mockResolvedValueOnce(
+    new Response(JSON.stringify([]), { status: 200 }),
+  );
+}
+
 function makeSSEResponse(
   events: Array<{ event: string; data: object }>,
   status = 200,
@@ -92,7 +116,7 @@ describe("ChatPage sidebar delete", () => {
   });
 
   it("× button is hidden when row is not hovered", async () => {
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     render(<ChatPage />);
 
@@ -105,7 +129,7 @@ describe("ChatPage sidebar delete", () => {
 
   it("× button appears on hover and disappears on leave", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     render(<ChatPage />);
 
@@ -133,7 +157,7 @@ describe("ChatPage sidebar delete", () => {
 
   it("clicking × shows confirm; cancel is a no-op", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     const confirmMock = vi.fn(() => false);
     vi.stubGlobal("confirm", confirmMock);
@@ -166,7 +190,7 @@ describe("ChatPage sidebar delete", () => {
 
   it("clicking × → confirm OK → DELETE /chat/{id} → row removed from sidebar", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     const confirmMock = vi.fn(() => true);
     vi.stubGlobal("confirm", confirmMock);
@@ -207,7 +231,7 @@ describe("ChatPage sidebar delete", () => {
 
   it("clicking × on the active conversation calls startNewConversation", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     const confirmMock = vi.fn(() => true);
     vi.stubGlobal("confirm", confirmMock);
@@ -266,7 +290,7 @@ describe("ChatPage sidebar delete", () => {
 
   it("clicking × propagation does NOT trigger loadConversation", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy);
+    mockMountFetches(fetchSpy);
 
     const confirmMock = vi.fn(() => false);
     vi.stubGlobal("confirm", confirmMock);
@@ -313,7 +337,7 @@ describe("ChatPage thinking indicator", () => {
 
   it("shows thinking indicator immediately after submit, before any SSE event lands", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // /chat/stream returns a stream that never emits — locks open
     fetchSpy.mockResolvedValueOnce(
@@ -342,7 +366,7 @@ describe("ChatPage thinking indicator", () => {
 
   it("hides thinking indicator on first token event", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Stream stays open after one token so indicator presence can be observed
     // pre-event and the indicator-cleared assertion lands once Wave 2 ships.
@@ -374,7 +398,7 @@ describe("ChatPage thinking indicator", () => {
 
   it("hides thinking indicator on first tool_call_start event (tool-first flow)", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       streamingResponse(
@@ -421,7 +445,7 @@ describe("ChatPage tool phase copy", () => {
 
   it("renders 'Searching the web…' while web_search is running", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Stream emits start but no result — leave open so the running state persists
     fetchSpy.mockResolvedValueOnce(
@@ -450,7 +474,7 @@ describe("ChatPage tool phase copy", () => {
 
   it("removes the tool phase copy once tool_call_result lands", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Open stream — emit start (running), then result (done), then close.
     fetchSpy.mockResolvedValueOnce(
@@ -510,7 +534,7 @@ describe("ChatPage SSE error event", () => {
 
   it("renders an error bubble when backend emits event: error", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -533,7 +557,7 @@ describe("ChatPage SSE error event", () => {
 
   it("preserves partial assistant content when error arrives after tokens", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -573,7 +597,7 @@ describe("ChatPage HTTP error responses", () => {
 
   it("renders BYOK error bubble on HTTP 402", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -596,7 +620,7 @@ describe("ChatPage HTTP error responses", () => {
 
   it("renders guest-limit error bubble on HTTP 429 using backend message when present", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -624,7 +648,7 @@ describe("ChatPage HTTP error responses", () => {
 
   it("renders generic server error bubble on HTTP 500", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Note: NOT JSON — exercises the path where backend returns plain text.
     fetchSpy.mockResolvedValueOnce(
@@ -659,7 +683,7 @@ describe("ChatPage multi-line composer", () => {
 
   it("Enter submits the message", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     fetchSpy.mockResolvedValueOnce(
       makeSSEResponse([
@@ -686,7 +710,7 @@ describe("ChatPage multi-line composer", () => {
 
   it("Shift+Enter inserts newline and does NOT submit", async () => {
     const user = userEvent.setup();
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     render(<ChatPage />);
 
@@ -709,7 +733,7 @@ describe("ChatPage multi-line composer", () => {
   });
 
   it("Enter during IME composition does NOT submit", async () => {
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     render(<ChatPage />);
 
@@ -753,7 +777,7 @@ describe("ChatPage upload poll cap", () => {
   it("stops polling after MAX_POLL_ATTEMPTS", async () => {
     vi.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Upload POST → 200
     fetchSpy.mockResolvedValueOnce(
@@ -799,7 +823,7 @@ describe("ChatPage upload poll cap", () => {
   it("stops polling and surfaces a status when fetch rejects", async () => {
     vi.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    mockConversationList(fetchSpy, []);
+    mockMountFetches(fetchSpy, []);
 
     // Upload POST → 200
     fetchSpy.mockResolvedValueOnce(

@@ -20,11 +20,20 @@ def _mock_user():
 @pytest.mark.asyncio
 async def test_stream_rejects_disabled_ollama_model():
     """MODEL-03: Stream endpoint must 422 when Ollama model submitted but OLLAMA_BASE_URL unset."""
+    mock_redis = AsyncMock()
+    mock_conn = AsyncMock()
+    mock_engine_cm = MagicMock()
+    mock_engine_cm.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_engine_cm.__aexit__ = AsyncMock(return_value=False)
+
     app.dependency_overrides[get_or_create_user] = lambda: _mock_user()
     try:
-        with patch("app.routers.chat.settings") as mock_settings:
+        with patch("app.routers.chat.settings") as mock_settings, \
+             patch("app.main.engine") as mock_engine, \
+             patch("arq.create_pool", new=AsyncMock(return_value=mock_redis)):
             mock_settings.ollama_base_url = ""
             mock_settings.guest_max_messages_per_session = 10
+            mock_engine.begin.return_value = mock_engine_cm
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/chat/stream",
