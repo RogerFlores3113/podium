@@ -157,11 +157,15 @@ def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str
     if provider == "ollama":
         return ""
     if not user_key:
+        provider_label = {
+            "anthropic": "Anthropic API key",
+            "openai": "OpenAI API key",
+        }.get(provider, "API key")
         raise HTTPException(
             status_code=402,
             detail={
                 "error": "byok_required",
-                "message": "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+                "message": f"Add your {provider_label} in Settings to chat. Or sign out and try Podium as a guest.",
             },
         )
     return user_key
