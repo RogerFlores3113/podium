@@ -11,14 +11,8 @@ import { ToolCallDisplay, type ToolCall } from "@/app/components/ToolCallDisplay
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const AVAILABLE_MODELS = [
-  { id: "gpt-5-nano", label: "GPT-5 nano" },
-  { id: "gpt-4o-mini", label: "GPT-4o mini" },
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-  { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-];
 const DEFAULT_MODEL = "gpt-5-nano";
+const FALLBACK_MODELS = [{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }];
 
 const CAPABILITY_CARDS = [
   { icon: "💬", label: "Ask anything", prompt: "What can you help me with?" },
@@ -77,6 +71,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
@@ -93,9 +88,7 @@ export default function ChatPage() {
         document.documentElement.setAttribute("data-theme", "dark");
       }
       const storedModel = localStorage.getItem("selectedModel");
-      if (storedModel && AVAILABLE_MODELS.some((m) => m.id === storedModel)) {
-        setSelectedModel(storedModel);
-      }
+      if (storedModel) setSelectedModel(storedModel);
     } catch {
       // private browsing
     }
@@ -109,6 +102,21 @@ export default function ChatPage() {
     } catch {
       // sessionStorage unavailable
     }
+    // Fetch available models from backend
+    void (async () => { try {
+      const res = await fetch(`${API_URL}/chat/models`);
+      if (res.ok) {
+        const models = await res.json();
+        setAvailableModels(models);
+        const stored = localStorage.getItem("selectedModel");
+        if (stored && models.some((m: { id: string }) => m.id === stored)) {
+          setSelectedModel(stored);
+        } else if (stored) {
+          setSelectedModel(DEFAULT_MODEL);
+          try { localStorage.removeItem("selectedModel"); } catch {}
+        }
+      }
+    } catch {} })();
     // Open sidebar by default on wider screens
     if (window.innerWidth >= 768) setSidebarOpen(true);
   }, []);
@@ -615,7 +623,9 @@ export default function ChatPage() {
                   setSelectedModel(e.target.value);
                   try { localStorage.setItem("selectedModel", e.target.value); } catch {}
                 }}
-                disabled={isLoading}
+                disabled={isLoading || isGuest}
+                aria-label={isGuest ? "Model selection unavailable for guest accounts" : "Select model"}
+                title={isGuest ? "Model selection unavailable for guest accounts" : undefined}
                 className="text-xs rounded px-2 py-1 focus:outline-none transition-opacity disabled:opacity-50"
                 style={{
                   background: "var(--bg-elevated)",
@@ -623,7 +633,7 @@ export default function ChatPage() {
                   color: "var(--text-muted)",
                 }}
               >
-                {AVAILABLE_MODELS.map((m) => (
+                {availableModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
               </select>
