@@ -153,7 +153,11 @@ def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str
     Authenticated users must have a BYOK key; 402 if they don't.
     """
     if user.is_guest:
-        return settings.openai_api_key
+        if provider == "ollama":
+            return settings.ollama_base_url or ""
+        if provider == "anthropic":
+            return settings.anthropic_api_key
+        return settings.openai_api_key  # default guest model is OpenAI
     if provider == "ollama":
         # For Ollama, the "key" stored in BYOK is the user's base URL.
         # Fall back to the server-wide OLLAMA_BASE_URL if no user URL is saved.
