@@ -80,6 +80,12 @@ When summarizing this conversation, preserve:
 - Decisions made and their rationale
 - Current test status and any failures
 
+## Subagent cost policy
+
+Default to spawning subagents **sequentially**. Use parallel spawning only when tasks are genuinely independent and parallelism provides clear value. Unnecessary parallel spawning causes cache-read spikes that cost real money; 2x wall time is an acceptable tradeoff.
+
+After a phase is verified complete, delete its RESEARCH.md and all its PLAN.md files immediately. RESEARCH.md files are large web-scraped reference docs needed only during planning. PLAN.md files are execution guides — once a phase is done and summarized in SUMMARY.md, they are dead. GSD itself classifies other phases' PLAN.md files as out-of-scope context (see universal-anti-patterns.md). SUMMARY.md is the permanent record.
+
 ## GSD Workflow
 
 This project uses GSD for planning and execution. Planning docs live in `.planning/` (local-only, gitignored).

@@ -13,7 +13,7 @@
 - [x] **Phase 3: Destructive UX Paths** — Make conversation and memory deletion actually work end-to-end with clear feedback. *(completed 2026-05-03)*
 - [x] **Phase 4: Loading & Error UX** — Surface thinking, tool-in-progress, and error states inline in the chat thread. *(completed 2026-05-03)*
 - [x] **Phase 5: Model Roster & Ollama** — Restrict roster to approved models, gate guests, and add Ollama as a dev/power-user opt-in. *(completed 2026-05-03)*
-- [ ] **Phase 6: PR #14 Audit & Smoke Test** — Verify guest mode, intro flow, and AWS changes still work after all prior phases.
+- [x] **Phase 6: PR #14 Audit & Smoke Test** — Verify guest mode, intro flow, and AWS changes still work after all prior phases. *(completed 2026-05-04)*
 
 ## Phase Details
 
@@ -97,10 +97,10 @@ Plans:
 **Wave 1**
 - [x] 06-01-PLAN.md — Wave 0 RED: write 7 failing tests for AUDIT-01 gaps + CR-02 + CR-04
 - [x] 06-02-PLAN.md — Wave 1 GREEN backend: fix CR-01, CR-02, CR-04
-- [ ] 06-03-PLAN.md — Wave 1 GREEN frontend: fix CR-03 (SSE JSON.parse guard)
+- [x] 06-03-PLAN.md — Wave 1 GREEN frontend: fix CR-03 (SSE JSON.parse guard)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 06-04-PLAN.md — Wave 2: AUDIT-02/03 manual checklist + phase SUMMARY + STATE/ROADMAP close-out
+- [x] 06-04-PLAN.md — Wave 2: AUDIT-02/03 manual checklist + phase SUMMARY + STATE/ROADMAP close-out
 **UI hint**: yes
 
 ## Coverage
@@ -148,8 +148,8 @@ Plans:
 | 3. Destructive UX Paths | 3/3 | Complete | 2026-05-03 |
 | 4. Loading & Error UX | 3/3 | Complete | 2026-05-03 |
 | 5. Model Roster & Ollama | 3/3 | Complete | 2026-05-03 |
-| 6. PR #14 Audit & Smoke Test | 2/4 | In progress | — |
+| 6. PR #14 Audit & Smoke Test | 4/4 | Complete | 2026-05-04 |
 
 ---
 *Roadmap defined: 2026-05-03*
-*Last updated: 2026-05-03 — Phase 5 complete (3 plans, 64 tests green)*
+*Last updated: 2026-05-04 — Phase 6 complete (4 plans, 71 tests green). Milestone Stabilization & Hardening: 6/6 phases complete.*
