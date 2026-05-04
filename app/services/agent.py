@@ -32,7 +32,7 @@ Guidelines:
 - Use document_search when the user asks about a specific candidate, role, or document they have uploaded.
 - Use web_search when you need current company information, salary data, industry news, or anything that may have changed recently.
 - Use url_reader when the user shares a link or when a web search result needs deeper reading before you can answer.
-- Use memory_search when the user references something they told you before, or when past context might improve your answer.
+- Use memory_search only when the user explicitly references something from a past session or asks about their saved preferences. Do not call it speculatively on every request.
 - Use memory_save when the user shares a personal fact, preference, or ongoing context that would be useful in future sessions (e.g., their name, company, preferred answer format, open requisitions). Do NOT save temporary task context — things they just asked about or one-time lookups.
 - Multiple sequential tool calls are fine when gathering information from different sources.
 
@@ -112,11 +112,12 @@ async def _run_responses_agent(
         logger.info(f"Responses API iteration {iteration + 1}/{settings.agent_max_iterations}")
 
         try:
+            _effort_map = {"fast": "low", "balanced": "medium", "thorough": "high"}
             stream = await client.responses.create(
                 model=model,
                 input=input_messages,
                 tools=responses_tools,
-                reasoning={"effort": "medium", "summary": "auto"},
+                reasoning={"effort": _effort_map.get(effort, "medium"), "summary": "auto"},
                 include=["reasoning.encrypted_content"],
                 store=True,
                 stream=True,
@@ -357,6 +358,16 @@ async def run_agent(
     if core_memories_text:
         system_prompt = f"{AGENT_SYSTEM_PROMPT}\n\n---\n\n{core_memories_text}"
 
+    if is_guest:
+        guest_addendum = (
+            "\n\n---\n\nGUEST MODE: memory_save is not available in guest sessions. "
+            "If the user asks you to remember something or save a preference, politely explain "
+            "that long-term memory saving is available to registered users and suggest they sign up. "
+            "Do not attempt to use memory_search speculatively — only use it if the user explicitly "
+            "references a past conversation."
+        )
+        system_prompt = system_prompt + guest_addendum
+
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
@@ -396,7 +407,7 @@ async def run_agent(
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
                 api_key="" if is_ollama else resolved_api_key,
                 api_base=normalize_ollama_url(resolved_api_key) if is_ollama else None,
-                max_tokens=1500,
+                max_tokens=600 if effort == "fast" else 1500,
                 stream=True,
             )
         except Exception as e:
