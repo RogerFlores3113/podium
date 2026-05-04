@@ -144,7 +144,7 @@ async def extract_memories_from_conversation(
 async def persist_memories(
     db: AsyncSession,
     user_id: str,
-    conversation_id: uuid.UUID,
+    conversation_id: uuid.UUID | None,
     memories: list[dict],
 ) -> int:
     """

@@ -40,3 +40,4 @@ from app.tools import document_search  # noqa: E402, F401
 from app.tools import python_executor  # noqa: E402, F401
 from app.tools import memory_search  # noqa: E402, F401
 from app.tools import url_reader  # noqa: E402, F401
+from app.tools import memory_save  # noqa: E402, F401
