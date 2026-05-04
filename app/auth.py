@@ -7,6 +7,7 @@ from jwt import PyJWKClient
 from jwt.exceptions import PyJWKClientError
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -107,10 +108,17 @@ async def get_or_create_user(
     user = result.scalar_one_or_none()
 
     if not user:
-        user = User(clerk_id=user_id)
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        logger.info(f"Created new user: {user_id}")
+        try:
+            user = User(clerk_id=user_id)
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+            logger.info(f"Created new user: {user_id}")
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(
+                select(User).where(User.clerk_id == user_id)
+            )
+            user = result.scalar_one()
 
     return user

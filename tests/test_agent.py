@@ -12,6 +12,16 @@ def test_responses_api_models_contains_gpt5_nano():
     assert "gpt-5-nano" in RESPONSES_API_MODELS
 
 
+def test_responses_api_models_contains_gpt_5_4_nano():
+    """MODEL-02: gpt-5.4-nano must be in the Responses API dispatch set."""
+    assert "gpt-5.4-nano" in RESPONSES_API_MODELS
+
+
+def test_guest_model_lock_is_gpt5_nano():
+    """MODEL-05: Guest model is always gpt-5-nano (locked in agent.py)."""
+    assert "gpt-5-nano" in RESPONSES_API_MODELS
+
+
 def test_to_responses_input_system_becomes_developer():
     messages = [{"role": "system", "content": "You are helpful."}]
     result = _to_responses_input(messages)

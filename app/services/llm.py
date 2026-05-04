@@ -15,10 +15,6 @@ from app.services.encryption import (
     set_cached_key,
 )
 
-from collections.abc import AsyncGenerator
-
-from litellm import acompletion
-
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's personal knowledge base.
@@ -108,75 +104,6 @@ def build_context_string(chunks: list[dict], max_tokens: int) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-async def generate_response(
-    query: str,
-    context_chunks: list[dict],
-    conversation_history: list[dict] | None = None,
-    api_key: str | None = None,
-) -> str:
-    """Build a prompt with context + history and send to the LLM."""
-
-    context = build_context_string(context_chunks, settings.context_max_tokens)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Add conversation history if present
-    if conversation_history:
-        messages.extend(conversation_history)
-
-    # The current user message includes the retrieved context
-    messages.append({
-        "role": "user",
-        "content": f"Context from your knowledge base:\n\n{context}\n\n---\n\nQuestion: {query}",
-    })
-
-    response = await acompletion(
-        model=settings.chat_model,
-        messages=messages,
-        api_key=resolve_api_key(api_key),
-        max_tokens=1000,
-    )
-
-    return response.choices[0].message.content
-
-async def generate_response_stream(
-    query: str,
-    context_chunks: list[dict],
-    conversation_history: list[dict] | None = None,
-    api_key: str | None = None,
-) -> AsyncGenerator[str, None]:
-    """
-    Same as generate_response, but yields tokens as they arrive.
-
-    The caller is responsible for collecting the full text if needed
-    (e.g., to save to the database).
-    """
-    context = build_context_string(context_chunks, settings.context_max_tokens)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if conversation_history:
-        messages.extend(conversation_history)
-
-    messages.append({
-        "role": "user",
-        "content": f"Context from your knowledge base:\n\n{context}\n\n---\n\nQuestion: {query}",
-    })
-
-    response = await acompletion(
-        model=settings.chat_model,
-        messages=messages,
-        api_key=resolve_api_key(api_key),
-        max_tokens=1000,
-        stream=True,  # This is the only difference
-    )
-
-    async for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content:
-            yield content
-
-
 async def get_user_api_key(
     db: AsyncSession,
     clerk_id: str,
@@ -217,21 +144,34 @@ async def get_user_api_key(
     return decrypted
 
 
-def resolve_api_key(user: User, user_key: str | None) -> str:
+def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str:
     """
     Return the API key to use for a request.
 
     Guests always use the system key (cost-controlled via model + rate limits).
+    Ollama uses a local endpoint — no API key required.
     Authenticated users must have a BYOK key; 402 if they don't.
     """
     if user.is_guest:
-        return settings.openai_api_key
+        if provider == "ollama":
+            return settings.ollama_base_url or ""
+        if provider == "anthropic":
+            return settings.anthropic_api_key
+        return settings.openai_api_key  # default guest model is OpenAI
+    if provider == "ollama":
+        # For Ollama, the "key" stored in BYOK is the user's base URL.
+        # Fall back to the server-wide OLLAMA_BASE_URL if no user URL is saved.
+        return user_key or settings.ollama_base_url or ""
     if not user_key:
+        provider_label = {
+            "anthropic": "Anthropic API key",
+            "openai": "OpenAI API key",
+        }.get(provider, "API key")
         raise HTTPException(
             status_code=402,
             detail={
                 "error": "byok_required",
-                "message": "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+                "message": f"Add your {provider_label} in Settings to chat. Or sign out and try Podium as a guest.",
             },
         )
     return user_key

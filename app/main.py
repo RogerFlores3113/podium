@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.config import settings
+from app.config import settings, CORS_ORIGINS
 from app.database import engine, async_session
 from app.errors import global_exception_handler
 from app.limiter import limiter
@@ -49,11 +49,7 @@ app = FastAPI(title="AI Assistant Platform", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://podium-beta.vercel.app",
-        "http://localhost:8000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

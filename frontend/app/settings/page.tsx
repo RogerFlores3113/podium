@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
 
@@ -40,6 +40,8 @@ export default function SettingsPage() {
   const [newCategory, setNewCategory] = useState("preference");
   const [newContent, setNewContent] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [memoryStatus, setMemoryStatus] = useState<string | null>(null);
+  const memoryStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- API Keys ---
 
@@ -69,7 +71,17 @@ export default function SettingsPage() {
 
   const handleDeleteKey = async (keyId: string) => {
     const res = await authFetch(`${API_URL}/keys/${keyId}`, { method: "DELETE" });
-    if (res.ok) loadKeys();
+    if (res.ok) {
+      loadKeys();
+    } else {
+      setKeyStatus("Failed to remove key");
+    }
+  };
+
+  const showMemoryStatus = (msg: string) => {
+    if (memoryStatusTimeoutRef.current) clearTimeout(memoryStatusTimeoutRef.current);
+    setMemoryStatus(msg);
+    memoryStatusTimeoutRef.current = setTimeout(() => setMemoryStatus(null), 3000);
   };
 
   // --- Memories ---
@@ -95,6 +107,9 @@ export default function SettingsPage() {
     if (res.ok) {
       setNewContent("");
       loadMemories();
+      showMemoryStatus("Memory added");
+    } else {
+      showMemoryStatus("Failed to add memory");
     }
   };
 
@@ -109,26 +124,45 @@ export default function SettingsPage() {
       setEditingId(null);
       setEditContent("");
       loadMemories();
+      showMemoryStatus("Memory updated");
+    } else {
+      showMemoryStatus("Failed to update memory");
     }
   };
 
   const handleDeleteMemory = async (memoryId: string) => {
+    setMemories((prev) => prev.filter((m) => m.id !== memoryId));
     const res = await authFetch(`${API_URL}/memories/${memoryId}`, {
       method: "DELETE",
     });
-    if (res.ok) loadMemories();
+    if (!res.ok) {
+      await loadMemories();
+      showMemoryStatus("Failed to delete memory");
+    }
   };
 
   const handleDeleteAllMemories = async () => {
     if (!confirm("Delete ALL memories? This cannot be undone.")) return;
+    setMemories([]);
     const res = await authFetch(`${API_URL}/memories/`, { method: "DELETE" });
-    if (res.ok) loadMemories();
+    if (res.ok) {
+      showMemoryStatus("All memories deleted");
+    } else {
+      await loadMemories();
+      showMemoryStatus("Failed to delete memories");
+    }
   };
 
   useEffect(() => {
     loadKeys();
-    loadMemories();
+    // loadMemories is called by the categoryFilter effect on mount and on filter changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (memoryStatusTimeoutRef.current) clearTimeout(memoryStatusTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -172,7 +206,7 @@ export default function SettingsPage() {
         <form onSubmit={handleAddKey} className="flex gap-2 mb-4">
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => { setProvider(e.target.value); setApiKey(""); }}
             className="rounded-lg px-3 py-2 text-sm"
             style={{
               background: "var(--bg-surface)",
@@ -185,10 +219,10 @@ export default function SettingsPage() {
             <option value="ollama">Ollama</option>
           </select>
           <input
-            type="password"
+            type={provider === "ollama" ? "text" : "password"}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-..."
+            placeholder={provider === "ollama" ? "http://host.docker.internal:11434" : "sk-..."}
             className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
             style={{
               background: "var(--bg-surface)",
@@ -201,9 +235,15 @@ export default function SettingsPage() {
             className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
             style={{ background: "var(--accent-warm)", color: "#fff" }}
           >
-            Save Key
+            {provider === "ollama" ? "Save URL" : "Save Key"}
           </button>
         </form>
+
+        {provider === "ollama" && (
+          <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+            The backend runs in Docker — use <code>host.docker.internal</code> instead of <code>localhost</code>. Models are detected automatically from your Ollama server.
+          </p>
+        )}
 
         {keyStatus && (
           <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
@@ -323,6 +363,17 @@ export default function SettingsPage() {
             Add
           </button>
         </form>
+
+        {memoryStatus && (
+          <p
+            className="text-sm mt-1"
+            style={{
+              color: memoryStatus.startsWith("Failed") ? "#b91c1c" : "var(--text-muted)",
+            }}
+          >
+            {memoryStatus}
+          </p>
+        )}
 
         {memories.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>

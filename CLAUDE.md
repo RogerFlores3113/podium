@@ -80,6 +80,32 @@ When summarizing this conversation, preserve:
 - Decisions made and their rationale
 - Current test status and any failures
 
+## Subagent cost policy
+
+Default to spawning subagents **sequentially**. Use parallel spawning only when tasks are genuinely independent and parallelism provides clear value. Unnecessary parallel spawning causes cache-read spikes that cost real money; 2x wall time is an acceptable tradeoff.
+
+After a phase is verified complete, delete its RESEARCH.md and all its PLAN.md files immediately. RESEARCH.md files are large web-scraped reference docs needed only during planning. PLAN.md files are execution guides — once a phase is done and summarized in SUMMARY.md, they are dead. GSD itself classifies other phases' PLAN.md files as out-of-scope context (see universal-anti-patterns.md). SUMMARY.md is the permanent record.
+
+## GSD Workflow
+
+This project uses GSD for planning and execution. Planning docs live in `.planning/` (local-only, gitignored).
+
+**Current milestone:** Stabilization & Hardening (6 phases, 27 requirements)
+**State:** `.planning/STATE.md` | **Roadmap:** `.planning/ROADMAP.md`
+
+Before starting any phase:
+- Run `/gsd-discuss-phase N` to load phase context
+- Run `/gsd-plan-phase N` to generate the execution plan
+- Run `/gsd-execute-phase N` to execute autonomously (YOLO mode)
+
+Phase order and dependencies:
+1. Wire Protocol & Visibility — WIRE-01–04, QUAL-01 (foundation, do first)
+2. Agent Reliability — AGENT-01–03, QUAL-02–04 (depends on Phase 1)
+3. Destructive UX Paths — CONV-01–02, MEM-01–02 (independent)
+4. Loading & Error UX — CHAT-01–06 (depends on Phase 1 + 2)
+5. Model Roster & Ollama — MODEL-01–05 (verify model IDs before merge)
+6. PR #14 Audit & Smoke Test — AUDIT-01–03 (runs last)
+
 ## Alembic migration note
 
 Two migrations share the title "add tool call fields to messages":

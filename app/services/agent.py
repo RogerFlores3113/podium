@@ -12,7 +12,7 @@ from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
 
 # Models that use the OpenAI Responses API instead of Chat Completions.
-RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano"})
+RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano", "gpt-5.4-nano"})
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,13 @@ Guidelines:
 - You can call multiple tools in sequence.
 - If you don't need any tools, just answer directly from your knowledge.
 - Be concise and specific. Cite sources when you use them.
+
+IMPORTANT — Tool synthesis rule:
+After EVERY tool call, you MUST write a complete response to the user that:
+1. Summarizes what the tool found (or explains if it found nothing useful).
+2. Directly answers the user's original question using that information.
+3. Cites URLs when web_search results are used.
+Never end your turn with only tool calls and no text — always follow tool results with a user-facing answer.
 """
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
@@ -151,11 +158,15 @@ async def _run_responses_agent(
                 elif item_type == "reasoning":
                     enc = getattr(item, "encrypted_content", None)
                     if enc:
-                        reasoning_items.append({
+                        reasoning_item: dict = {
                             "type": "reasoning",
                             "id": item.id,
                             "encrypted_content": enc,
-                        })
+                        }
+                        summary = getattr(item, "summary", None)
+                        if summary is not None:
+                            reasoning_item["summary"] = summary
+                        reasoning_items.append(reasoning_item)
 
         # Emit the full assistant message for DB persistence
         tool_calls_list = (
@@ -173,6 +184,22 @@ async def _run_responses_agent(
         yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
 
         if not pending_calls:
+            if not accumulated_text.strip():
+                if iteration == 0:
+                    input_messages.append({
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "Please summarize your findings and answer my question."}],
+                    })
+                    logger.warning(
+                        "Empty completion (Responses API) on iteration %d — retrying", iteration
+                    )
+                    continue
+                else:
+                    yield {
+                        "type": "assistant_message",
+                        "content": "I wasn't able to generate a response. Please try again.",
+                        "tool_calls": None,
+                    }
             yield {"type": "done"}
             return
 
@@ -303,11 +330,13 @@ async def run_agent(
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")
 
         try:
+            is_ollama = resolved_model.startswith("ollama/")
             response = await acompletion(
                 model=resolved_model,
                 messages=messages,
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
-                api_key=resolved_api_key,
+                api_key="" if is_ollama else resolved_api_key,
+                api_base=resolved_api_key if is_ollama else None,
                 max_tokens=1500,
                 stream=True,
             )
@@ -322,6 +351,8 @@ async def run_agent(
         # Keyed by index because tool calls arrive as deltas with an index field.
 
         async for chunk in response:
+            if chunk is None:
+                break
             delta = chunk.choices[0].delta
 
             # Handle text content — stream it to the frontend as it arrives
@@ -363,6 +394,26 @@ async def run_agent(
 
         # Stream is done for this iteration. Now decide: is the agent finished,
         # or does it need to execute tools and loop again?
+
+        # Empty-completion guard: no text and no tool calls = silent done
+        if not accumulated_tool_calls and not accumulated_text.strip():
+            if iteration == 0:
+                # Retry once with a nudge message
+                messages.append({
+                    "role": "user",
+                    "content": "Please summarize your findings and answer my question.",
+                })
+                logger.warning("Empty completion on iteration %d — retrying with nudge", iteration)
+                continue
+            else:
+                # Already retried — yield graceful fallback
+                yield {
+                    "type": "assistant_message",
+                    "content": "I wasn't able to generate a response. Please try again.",
+                    "tool_calls": None,
+                }
+                yield {"type": "done"}
+                return
 
         if not accumulated_tool_calls:
             # No tool calls → this is the final response. Persist and return.

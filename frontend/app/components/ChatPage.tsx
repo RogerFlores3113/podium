@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { UserButton } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,14 +11,8 @@ import { ToolCallDisplay, type ToolCall } from "@/app/components/ToolCallDisplay
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const AVAILABLE_MODELS = [
-  { id: "gpt-5-nano", label: "GPT-5 nano" },
-  { id: "gpt-4o-mini", label: "GPT-4o mini" },
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-  { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-];
 const DEFAULT_MODEL = "gpt-5-nano";
+const FALLBACK_MODELS = [{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }];
 
 const CAPABILITY_CARDS = [
   { icon: "💬", label: "Ask anything", prompt: "What can you help me with?" },
@@ -31,11 +26,32 @@ const CAPABILITY_CARDS = [
 const WELCOME_MESSAGE =
   "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  toolCalls?: ToolCall[];
-}
+const TOOL_PHASE_COPY: Record<string, string> = {
+  web_search: "Searching the web…",
+  document_search: "Reading uploaded documents…",
+  url_reader: "Reading source…",
+  python_executor: "Running code…",
+  memory_search: "Recalling earlier conversations…",
+};
+const toolPhaseCopy = (name: string): string =>
+  TOOL_PHASE_COPY[name] ?? `Working on ${name}…`;
+
+type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
+
+const ERROR_COPY: Record<ErrorKind, string> = {
+  byok: "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+  limit: "You've reached the guest message limit. Sign up to keep chatting.",
+  server: "Something went wrong on our end. Please try again in a moment.",
+  stream: "", // SSE error fills from data.detail
+  network: "Connection lost. Please check your network and try again.",
+};
+
+const MAX_POLL_ATTEMPTS = 60;
+
+interface UserMessage { role: "user"; content: string }
+interface AssistantMessage { role: "assistant"; content: string; toolCalls?: ToolCall[] }
+interface ErrorMessage { role: "error"; kind: ErrorKind; content: string }
+type Message = UserMessage | AssistantMessage | ErrorMessage;
 
 interface ConversationItem {
   id: string;
@@ -48,14 +64,18 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
+  const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
+  const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -68,9 +88,7 @@ export default function ChatPage() {
         document.documentElement.setAttribute("data-theme", "dark");
       }
       const storedModel = localStorage.getItem("selectedModel");
-      if (storedModel && AVAILABLE_MODELS.some((m) => m.id === storedModel)) {
-        setSelectedModel(storedModel);
-      }
+      if (storedModel) setSelectedModel(storedModel);
     } catch {
       // private browsing
     }
@@ -84,6 +102,28 @@ export default function ChatPage() {
     } catch {
       // sessionStorage unavailable
     }
+    // Fetch available models from backend (base list + dynamic Ollama models)
+    void (async () => { try {
+      const res = await fetch(`${API_URL}/chat/models`);
+      if (!res.ok) return;
+      const baseModels = await res.json();
+      let allModels = baseModels;
+      try {
+        const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+        if (ollamaRes.ok) {
+          const ollamaModels = await ollamaRes.json();
+          if (ollamaModels.length > 0) allModels = [...baseModels, ...ollamaModels];
+        }
+      } catch {}
+      setAvailableModels(allModels);
+      const stored = localStorage.getItem("selectedModel");
+      if (stored && allModels.some((m: { id: string }) => m.id === stored)) {
+        setSelectedModel(stored);
+      } else if (stored) {
+        setSelectedModel(DEFAULT_MODEL);
+        try { localStorage.removeItem("selectedModel"); } catch {}
+      }
+    } catch {} })();
     // Open sidebar by default on wider screens
     if (window.innerWidth >= 768) setSidebarOpen(true);
   }, []);
@@ -104,7 +144,9 @@ export default function ChatPage() {
       const res = await authFetch(`${API_URL}/chat/`);
       if (!res.ok) return;
       const data = await res.json();
-      setConversations(data);
+      if (Array.isArray(data)) {
+        setConversations(data);
+      }
     } catch {
       // sidebar is non-critical
     }
@@ -126,10 +168,11 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Clean up upload poll on unmount
+  // Clean up upload poll and hover timeout on unmount
   useEffect(() => {
     return () => {
       if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+      if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
     };
   }, []);
 
@@ -137,6 +180,14 @@ export default function ChatPage() {
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setConversationId(null);
     hasWelcomed.current = true;
+  };
+
+  const handleDeleteConversation = async (id: string) => {
+    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+    const res = await authFetch(`${API_URL}/chat/${id}`, { method: "DELETE" });
+    if (!res.ok) return; // sidebar silent per D-05
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (conversationId === id) startNewConversation();
   };
 
   const loadConversation = async (id: string) => {
@@ -160,138 +211,204 @@ export default function ChatPage() {
     setInput(prompt);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitMessage = async () => {
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setIsThinking(true);
 
+    let response: Response;
     try {
-      const response = await authFetch(`${API_URL}/chat/stream`, {
+      response = await authFetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
       });
+    } catch {
+      setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
 
-      if (response.status === 402) {
-        setByokError(true);
-        setMessages((prev) => prev.slice(0, -1)); // remove the empty assistant placeholder
-        setIsLoading(false);
-        return;
-      }
+    if (response.status === 402) {
+      setByokError(true);
+      let copy = ERROR_COPY.byok;
+      try {
+        const body = await response.json();
+        if (body?.detail?.message) copy = body.detail.message;
+      } catch { /* use generic copy */ }
+      setMessages((prev) => [...prev, { role: "error", kind: "byok", content: copy }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
+    if (response.status === 429) {
+      let copy = ERROR_COPY.limit;
+      try {
+        const body = await response.json();
+        if (body?.detail?.message) copy = body.detail.message;
+      } catch { /* generic copy */ }
+      setMessages((prev) => [...prev, { role: "error", kind: "limit", content: copy }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
+    if (!response.ok) {
+      // 5xx (or any other non-2xx). DO NOT read body — Pitfall 2 + V7.
+      setMessages((prev) => [...prev, { role: "error", kind: "server", content: ERROR_COPY.server }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
 
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+    try {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No reader available");
 
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\r\n\r\n");
-        buffer = parts.pop() || "";
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
 
-        for (const part of parts) {
-          if (!part.trim()) continue;
-          const lines = part.split("\r\n");
-          let currentEvent = "";
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            const lines = part.split("\n");
+            let currentEvent = "";
 
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                currentEvent = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                let data: any;
+                try {
+                  data = JSON.parse(line.slice(6));
+                } catch {
+                  continue; // skip malformed frames, don't abort the stream
+                }
 
-              if (currentEvent === "conversation") {
-                setConversationId(data.conversation_id);
-              } else if (currentEvent === "token") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant") {
-                    updated[updated.length - 1] = { ...last, content: last.content + data.token };
-                  }
-                  return updated;
-                });
-              } else if (currentEvent === "tool_call_start") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant") {
-                    const newToolCall: ToolCall = {
-                      id: data.id,
-                      name: data.name,
-                      arguments: data.arguments,
-                      status: "running",
-                    };
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: [...(last.toolCalls || []), newToolCall],
-                    };
-                  }
-                  return updated;
-                });
-              } else if (currentEvent === "tool_call_result") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant" && last.toolCalls) {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: last.toolCalls.map((tc) =>
-                        tc.id === data.id ? { ...tc, result: data.result, status: "done" as const } : tc
-                      ),
-                    };
-                  }
-                  return updated;
-                });
-                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-              } else if (currentEvent === "tool_call_error") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant" && last.toolCalls) {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: last.toolCalls.map((tc) =>
-                        tc.id === data.id ? { ...tc, error: data.error, status: "error" as const } : tc
-                      ),
-                    };
-                  }
-                  return updated;
-                });
-                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-              } else if (currentEvent === "done") {
-                // Refresh sidebar after new conversation completes
-                fetchConversations();
+                if (currentEvent === "conversation") {
+                  setConversationId(data.conversation_id);
+                } else if (currentEvent === "token") {
+                  // flushSync ensures each token renders immediately (visible streaming).
+                  flushSync(() => {
+                    setIsThinking(false);
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      const last = updated[updated.length - 1];
+                      if (last.role === "assistant") {
+                        updated[updated.length - 1] = { ...last, content: last.content + data.token };
+                      }
+                      return updated;
+                    });
+                  });
+                } else if (currentEvent === "tool_call_start") {
+                  // flushSync ensures the "running" phase copy renders before the result arrives.
+                  flushSync(() => {
+                    setIsThinking(false);
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      const last = updated[updated.length - 1];
+                      if (last.role === "assistant") {
+                        const newToolCall: ToolCall = {
+                          id: data.id,
+                          name: data.name,
+                          arguments: data.arguments,
+                          status: "running",
+                        };
+                        updated[updated.length - 1] = {
+                          ...last,
+                          toolCalls: [...(last.toolCalls || []), newToolCall],
+                        };
+                      }
+                      return updated;
+                    });
+                  });
+                } else if (currentEvent === "tool_call_result") {
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last.role === "assistant" && last.toolCalls) {
+                      updated[updated.length - 1] = {
+                        ...last,
+                        toolCalls: last.toolCalls.map((tc) =>
+                          tc.id === data.id ? { ...tc, result: data.result, status: "done" as const } : tc
+                        ),
+                      };
+                    }
+                    return updated;
+                  });
+                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                } else if (currentEvent === "tool_call_error") {
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last.role === "assistant" && last.toolCalls) {
+                      updated[updated.length - 1] = {
+                        ...last,
+                        toolCalls: last.toolCalls.map((tc) =>
+                          tc.id === data.id ? { ...tc, error: data.error, status: "error" as const } : tc
+                        ),
+                      };
+                    }
+                    return updated;
+                  });
+                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                } else if (currentEvent === "done") {
+                  // Refresh sidebar after new conversation completes
+                  fetchConversations();
+                } else if (currentEvent === "error") {
+                  setIsThinking(false);
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    // Preserve partial assistant content (Pitfall 6) — only pop empty placeholders.
+                    if (
+                      last &&
+                      last.role === "assistant" &&
+                      !last.content &&
+                      (!last.toolCalls || last.toolCalls.length === 0)
+                    ) {
+                      updated.pop();
+                    }
+                    updated.push({
+                      role: "error",
+                      kind: "stream",
+                      content: data.detail || "The response was interrupted. Please try again.",
+                    });
+                    return updated;
+                  });
+                }
               }
             }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages((prev) => {
-        const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === "assistant") {
-          updated[updated.length - 1] = {
-            ...last,
-            content: "Something went wrong. Please try again.",
-          };
-        }
-        return updated;
-      });
+    } catch {
+      setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
     }
 
+    setIsThinking(false);
     setIsLoading(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMessage();
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,16 +432,37 @@ export default function ChatPage() {
       setUploadStatus(`Processing: ${doc.filename}`);
 
       if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+      let attempts = 0;
       uploadPollRef.current = setInterval(async () => {
-        const statusRes = await authFetch(`${API_URL}/documents/${doc.id}`);
-        const statusDoc = await statusRes.json();
-
-        if (statusDoc.status === "ready") {
-          setUploadStatus(`Ready: ${statusDoc.filename} (${statusDoc.page_count} pages)`);
+        attempts += 1;
+        if (attempts > MAX_POLL_ATTEMPTS) {
           if (uploadPollRef.current) clearInterval(uploadPollRef.current);
-        } else if (statusDoc.status === "failed") {
-          setUploadStatus(`Failed: ${statusDoc.filename}`);
+          uploadPollRef.current = null;
+          setUploadStatus(`Upload taking too long: ${doc.filename}`);
+          return;
+        }
+        try {
+          const statusRes = await authFetch(`${API_URL}/documents/${doc.id}`);
+          // Stale-tick guard (Pitfall 4): another tick may have cleared the interval while we awaited.
+          if (uploadPollRef.current === null) return;
+          if (!statusRes.ok) throw new Error(`status ${statusRes.status}`);
+          const statusDoc = await statusRes.json();
+          if (uploadPollRef.current === null) return;
+          if (statusDoc.status === "ready") {
+            setUploadStatus(
+              `Ready: ${statusDoc.filename} (${statusDoc.page_count} pages)`,
+            );
+            clearInterval(uploadPollRef.current);
+            uploadPollRef.current = null;
+          } else if (statusDoc.status === "failed") {
+            setUploadStatus(`Failed: ${statusDoc.filename}`);
+            clearInterval(uploadPollRef.current);
+            uploadPollRef.current = null;
+          }
+        } catch {
           if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+          uploadPollRef.current = null;
+          setUploadStatus("Upload status check failed");
         }
       }, 1000);
     } catch {
@@ -396,10 +534,32 @@ export default function ChatPage() {
             </p>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => loadConversation(conv.id)}
-                className="w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    loadConversation(conv.id);
+                  }
+                }}
+                onMouseEnter={() => {
+                  if (hoverHideTimeoutRef.current) {
+                    clearTimeout(hoverHideTimeoutRef.current);
+                    hoverHideTimeoutRef.current = null;
+                  }
+                  setHoveredConvId(conv.id);
+                }}
+                onMouseLeave={() => {
+                  // Defer hide so mouseenter on the × button child can cancel it
+                  hoverHideTimeoutRef.current = setTimeout(
+                    () => setHoveredConvId(null),
+                    0
+                  );
+                }}
+                className="relative w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80 cursor-pointer"
                 style={{
                   background: conv.id === conversationId ? "var(--bg-surface)" : "transparent",
                   border: conv.id === conversationId ? "1px solid var(--border)" : "1px solid transparent",
@@ -414,7 +574,34 @@ export default function ChatPage() {
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                   {formatRelativeTime(conv.created_at)}
                 </div>
-              </button>
+                {hoveredConvId === conv.id && (
+                  <button
+                    type="button"
+                    title="Delete conversation"
+                    onMouseEnter={() => {
+                      if (hoverHideTimeoutRef.current) {
+                        clearTimeout(hoverHideTimeoutRef.current);
+                        hoverHideTimeoutRef.current = null;
+                      }
+                      setHoveredConvId(conv.id);
+                    }}
+                    onMouseLeave={() => {
+                      hoverHideTimeoutRef.current = setTimeout(
+                        () => setHoveredConvId(null),
+                        0
+                      );
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteConversation(conv.id);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-sm transition-opacity hover:opacity-70"
+                    style={{ color: "#b91c1c" }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>
@@ -458,7 +645,9 @@ export default function ChatPage() {
                   setSelectedModel(e.target.value);
                   try { localStorage.setItem("selectedModel", e.target.value); } catch {}
                 }}
-                disabled={isLoading}
+                disabled={isLoading || isGuest}
+                aria-label={isGuest ? "Model selection unavailable for guest accounts" : "Select model"}
+                title={isGuest ? "Model selection unavailable for guest accounts" : undefined}
                 className="text-xs rounded px-2 py-1 focus:outline-none transition-opacity disabled:opacity-50"
                 style={{
                   background: "var(--bg-elevated)",
@@ -466,7 +655,7 @@ export default function ChatPage() {
                   color: "var(--text-muted)",
                 }}
               >
-                {AVAILABLE_MODELS.map((m) => (
+                {availableModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
               </select>
@@ -506,7 +695,26 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto space-y-4 mb-4">
             {messages.map((msg, i) => (
               <div key={i}>
-                {msg.content && (
+                {msg.role === "error" && (
+                  <div
+                    className="flex justify-start mb-2"
+                    data-testid="error-bubble"
+                    role="alert"
+                  >
+                    <div
+                      className="max-w-[80%] rounded-lg px-4 py-2 text-sm"
+                      style={{
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        color: "#b91c1c",
+                      }}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                )}
+
+                {msg.role !== "error" && msg.content && (
                   <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-2`}>
                     <div
                       className="max-w-[80%] rounded-lg px-4 py-2"
@@ -529,15 +737,45 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                {msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
                   <div className="space-y-2 my-2">
                     {msg.toolCalls.map((tc) => (
-                      <ToolCallDisplay key={tc.id} toolCall={tc} />
+                      <div key={tc.id}>
+                        {tc.status === "running" && (
+                          <div
+                            className="text-xs italic mb-1"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {toolPhaseCopy(tc.name)}
+                          </div>
+                        )}
+                        <ToolCallDisplay toolCall={tc} />
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
             ))}
+
+            {isThinking && (
+              <div
+                className="flex justify-start mb-2"
+                data-testid="thinking-indicator"
+                role="status"
+                aria-label="Thinking"
+              >
+                <div
+                  className="rounded-lg px-4 py-2"
+                  style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}
+                >
+                  <span className="inline-flex gap-1">
+                    <span className="animate-pulse">·</span>
+                    <span className="animate-pulse" style={{ animationDelay: "150ms" }}>·</span>
+                    <span className="animate-pulse" style={{ animationDelay: "300ms" }}>·</span>
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Capability cards — shown only on fresh conversation */}
             {showCapabilityCards && (
@@ -565,16 +803,34 @@ export default function ChatPage() {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+              }}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  submitMessage();
+                }
+              }}
               placeholder="Ask me anything…"
-              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+              rows={1}
+              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none resize-none"
               style={{
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border)",
                 color: "var(--text-primary)",
+                minHeight: "40px",
+                maxHeight: "144px",
+                overflowY: "auto",
               }}
               disabled={isLoading}
             />

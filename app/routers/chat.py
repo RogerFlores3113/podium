@@ -3,6 +3,7 @@ import json
 import logging
 from sse_starlette.sse import EventSourceResponse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,8 +27,36 @@ logger = logging.getLogger(__name__)
 
 @router.get("/models")
 async def list_models():
-    """Return the list of models available for selection."""
+    """Return non-Ollama models available for selection. Ollama models are fetched separately."""
     return AVAILABLE_MODELS
+
+
+@router.get("/ollama-models")
+async def list_ollama_models(
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return models available on the user's configured Ollama server."""
+    user_ollama_url = await get_user_api_key(db, user.clerk_id, "ollama")
+    base_url = user_ollama_url or settings.ollama_base_url
+    if not base_url:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url.rstrip('/')}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return []
+    models = [
+        {
+            "id": f"ollama/{m['name']}",
+            "label": f"{m['name']} (local)",
+            "provider": "ollama",
+        }
+        for m in data.get("models", [])
+    ]
+    return models
 
 
 @router.get("/", response_model=list[ConversationListItemResponse])
@@ -67,6 +96,31 @@ async def get_conversation(
     return conversation
 
 
+@router.delete("/{conversation_id}")
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete a conversation. Cascades to messages via FK ondelete=CASCADE.
+
+    Memory.source_conversation_id is set to NULL (FK ondelete=SET NULL),
+    preserving extracted memories with provenance link severed.
+    """
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.clerk_id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await db.delete(conversation)
+    await db.commit()
+    return {"detail": "Conversation deleted"}
+
+
 @router.post("/stream")
 @limiter.limit("5/minute")
 async def chat_stream(
@@ -88,6 +142,12 @@ async def chat_stream(
       - error: unrecoverable failure
     """
     user_id = user.clerk_id
+
+    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models)
+    if body.model:
+        active_model_ids = {m["id"] for m in await list_models()}
+        if body.model not in active_model_ids:
+            raise HTTPException(status_code=422, detail="Model not available")
 
     # Enforce guest message cap before doing any DB work
     if user.is_guest:
@@ -125,6 +185,12 @@ async def chat_stream(
         db.add(conversation)
         await db.flush()
 
+    history = []
+    if body.conversation_id:
+        history = await build_conversation_history(
+            db, conversation.id, settings.memory_max_tokens
+        )
+
     user_message = Message(
         conversation_id=conversation.id,
         user_id=user_id,
@@ -134,15 +200,9 @@ async def chat_stream(
     db.add(user_message)
     await db.flush()
 
-    history = []
-    if body.conversation_id:
-        history = await build_conversation_history(
-            db, conversation.id, settings.memory_max_tokens
-        )
-
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
-    resolved_api_key = resolve_api_key(user, user_api_key)
+    resolved_api_key = resolve_api_key(user, user_api_key, provider=provider)
 
     # Load core memories for prompt injection
     core_memories = await retrieve_core_memories(db, user_id)
@@ -231,6 +291,7 @@ async def chat_stream(
                             "extract_memories_job",
                             str(conversation.id),
                             user_id,
+                            _job_id=f"extract:{conversation.id}",
                             _defer_by=settings.memory_extraction_delay,
                         )
                     except Exception as e:
@@ -254,5 +315,7 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": str(e)}),
             }
+        finally:
+            await db.commit()
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(event_generator(), sep="\n", ping=15)

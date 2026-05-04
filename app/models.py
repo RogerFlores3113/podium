@@ -103,7 +103,7 @@ class Conversation(Base):
         DateTime, nullable=False, default=datetime.utcnow
     )
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    messages: Mapped[list["Message"]] = relationship(back_populates="conversation", passive_deletes=True)
 
 
 class Message(Base):
