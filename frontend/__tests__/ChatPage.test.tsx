@@ -5,9 +5,11 @@ import userEvent from "@testing-library/user-event";
 // Stable getToken reference — must not be re-created on each useAuth() call
 // or authFetch's useCallback dep changes on every render, causing ∞ fetchConversations loop
 const stableGetToken = vi.fn().mockResolvedValue("test-token");
+let mockIsSignedIn: boolean | undefined = undefined;
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
     getToken: stableGetToken,
+    isSignedIn: mockIsSignedIn,
   }),
   UserButton: () => <div data-testid="user-button" />,
 }));
@@ -106,6 +108,7 @@ describe("ChatPage sidebar delete", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -326,6 +329,7 @@ describe("ChatPage thinking indicator", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -434,6 +438,7 @@ describe("ChatPage tool phase copy", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -523,6 +528,7 @@ describe("ChatPage SSE error event", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -586,6 +592,7 @@ describe("ChatPage HTTP error responses", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -672,6 +679,7 @@ describe("ChatPage multi-line composer", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -764,6 +772,7 @@ describe("ChatPage upload poll cap", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockIsSignedIn = undefined;
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
@@ -860,5 +869,159 @@ describe("ChatPage upload poll cap", () => {
     const callsAfter = fetchSpy.mock.calls.length;
     await vi.advanceTimersByTimeAsync(10_000);
     expect(fetchSpy.mock.calls.length).toBe(callsAfter);
+  });
+});
+
+describe("hamburger button", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("has md:hidden class so it is invisible on desktop", async () => {
+    mockMountFetches(fetchSpy);
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const hamburger = screen.getByTitle("Toggle sidebar");
+    expect(hamburger.className).toContain("md:hidden");
+  });
+});
+
+describe("guest banner reactive cleanup", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  it("clears guest state when isSignedIn becomes true", async () => {
+    mockIsSignedIn = undefined;
+    // Simulate a guest session via sessionStorage
+    sessionStorage.setItem("podium_guest_token", "tok");
+    sessionStorage.setItem("podium_guest_expires", new Date(Date.now() + 86400000).toISOString());
+    mockMountFetches(fetchSpy);
+    // Need an extra slot for fetchConversations triggered by isSignedIn effect
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    const { rerender } = render(<ChatPage />);
+    await waitFor(() => expect(screen.queryByText(/Guest session/)).toBeInTheDocument());
+
+    // Simulate Clerk confirming sign-in
+    mockIsSignedIn = true;
+    rerender(<ChatPage />);
+    await waitFor(() => expect(screen.queryByText(/Guest session/)).not.toBeInTheDocument());
+  });
+});
+
+describe("capability cards", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("does not include Generate images card", async () => {
+    mockMountFetches(fetchSpy);
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(screen.queryByText("Generate images")).not.toBeInTheDocument();
+  });
+});
+
+describe("ChatPage BYOK provider-correct copy", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("shows provider-correct copy from 402 detail.message", async () => {
+    mockMountFetches(fetchSpy, []);
+    const byokBody = JSON.stringify({
+      detail: {
+        error: "byok_required",
+        message: "Add your Anthropic API key in Settings to chat. Or sign out and try Podium as a guest.",
+      },
+    });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(byokBody, { status: 402, headers: { "Content-Type": "application/json" } }),
+    );
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox"), "hello");
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.getByText(/Anthropic API key/)).toBeInTheDocument()
+    );
+  });
+});
+
+describe("synthesis gap indicator", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("shows thinking indicator after tool_call_result SSE event", async () => {
+    mockMountFetches(fetchSpy, []);
+    const sseBody = [
+      'event: conversation\ndata: {"conversation_id":"c-new"}\n\n',
+      'event: tool_call_start\ndata: {"id":"tc1","name":"web_search","arguments":"{}"}\n\n',
+      'event: tool_call_result\ndata: {"id":"tc1","result":"done"}\n\n',
+    ].join("");
+    fetchSpy.mockResolvedValueOnce(
+      new Response(sseBody, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox"), "search this");
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.getByTestId("thinking-indicator")).toBeInTheDocument()
+    );
   });
 });
