@@ -226,6 +226,7 @@ async def chat_stream(
                 core_memories_text=core_memories_text,
                 model=body.model or settings.chat_model,
                 is_guest=user.is_guest,
+                effort=body.effort,
             ):
                 event_type = agent_event["type"]
 
