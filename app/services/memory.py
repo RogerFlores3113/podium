@@ -92,15 +92,19 @@ async def extract_memories_from_conversation(
     except Exception as e:
         # response_format="json_object" requires specific prompt wording on some models
         logger.warning(f"JSON mode failed, retrying without: {e}")
-        response = await acompletion(
-            model=settings.memory_extraction_model,
-            messages=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
-                {"role": "user", "content": f"Conversation:\n\n{conversation_text}"},
-            ],
-            api_key=settings.openai_api_key,
-            max_tokens=1000,
-        )
+        try:
+            response = await acompletion(
+                model=settings.memory_extraction_model,
+                messages=[
+                    {"role": "system", "content": EXTRACTION_PROMPT},
+                    {"role": "user", "content": f"Conversation:\n\n{conversation_text}"},
+                ],
+                api_key=settings.openai_api_key,
+                max_tokens=1000,
+            )
+        except Exception as retry_err:
+            logger.error("Memory extraction retry also failed: %s", retry_err, exc_info=True)
+            return []
 
     content = response.choices[0].message.content.strip()
     logger.info(f"Memory extraction response ({len(content)} chars): {content[:200]}")
@@ -169,7 +173,6 @@ async def persist_memories(
         db.add(memory)
         count += 1
 
-    await db.commit()
     logger.info(f"Persisted {count} memories for user {user_id}")
     return count
 
@@ -189,7 +192,7 @@ async def retrieve_core_memories(
         select(Memory)
         .where(
             Memory.user_id == user_id,
-            Memory.is_active == True,
+            Memory.is_active.is_(True),
             Memory.category.in_(["fact", "preference"]),
         )
         .order_by(Memory.updated_at.desc())
