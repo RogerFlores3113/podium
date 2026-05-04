@@ -268,125 +268,129 @@ export default function ChatPage() {
 
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
 
-        for (const part of parts) {
-          if (!part.trim()) continue;
-          const lines = part.split("\n");
-          let currentEvent = "";
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            const lines = part.split("\n");
+            let currentEvent = "";
 
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              let data: any;
-              try {
-                data = JSON.parse(line.slice(6));
-              } catch {
-                continue; // skip malformed frames, don't abort the stream
-              }
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                currentEvent = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                let data: any;
+                try {
+                  data = JSON.parse(line.slice(6));
+                } catch {
+                  continue; // skip malformed frames, don't abort the stream
+                }
 
-              if (currentEvent === "conversation") {
-                setConversationId(data.conversation_id);
-              } else if (currentEvent === "token") {
-                // flushSync ensures each token renders immediately (visible streaming).
-                flushSync(() => {
-                  setIsThinking(false);
-                  setMessages((prev) => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last.role === "assistant") {
-                      updated[updated.length - 1] = { ...last, content: last.content + data.token };
-                    }
-                    return updated;
+                if (currentEvent === "conversation") {
+                  setConversationId(data.conversation_id);
+                } else if (currentEvent === "token") {
+                  // flushSync ensures each token renders immediately (visible streaming).
+                  flushSync(() => {
+                    setIsThinking(false);
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      const last = updated[updated.length - 1];
+                      if (last.role === "assistant") {
+                        updated[updated.length - 1] = { ...last, content: last.content + data.token };
+                      }
+                      return updated;
+                    });
                   });
-                });
-              } else if (currentEvent === "tool_call_start") {
-                // flushSync ensures the "running" phase copy renders before the result arrives.
-                flushSync(() => {
-                  setIsThinking(false);
+                } else if (currentEvent === "tool_call_start") {
+                  // flushSync ensures the "running" phase copy renders before the result arrives.
+                  flushSync(() => {
+                    setIsThinking(false);
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      const last = updated[updated.length - 1];
+                      if (last.role === "assistant") {
+                        const newToolCall: ToolCall = {
+                          id: data.id,
+                          name: data.name,
+                          arguments: data.arguments,
+                          status: "running",
+                        };
+                        updated[updated.length - 1] = {
+                          ...last,
+                          toolCalls: [...(last.toolCalls || []), newToolCall],
+                        };
+                      }
+                      return updated;
+                    });
+                  });
+                } else if (currentEvent === "tool_call_result") {
                   setMessages((prev) => {
                     const updated = [...prev];
                     const last = updated[updated.length - 1];
-                    if (last.role === "assistant") {
-                      const newToolCall: ToolCall = {
-                        id: data.id,
-                        name: data.name,
-                        arguments: data.arguments,
-                        status: "running",
-                      };
+                    if (last.role === "assistant" && last.toolCalls) {
                       updated[updated.length - 1] = {
                         ...last,
-                        toolCalls: [...(last.toolCalls || []), newToolCall],
+                        toolCalls: last.toolCalls.map((tc) =>
+                          tc.id === data.id ? { ...tc, result: data.result, status: "done" as const } : tc
+                        ),
                       };
                     }
                     return updated;
                   });
-                });
-              } else if (currentEvent === "tool_call_result") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant" && last.toolCalls) {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: last.toolCalls.map((tc) =>
-                        tc.id === data.id ? { ...tc, result: data.result, status: "done" as const } : tc
-                      ),
-                    };
-                  }
-                  return updated;
-                });
-                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-              } else if (currentEvent === "tool_call_error") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant" && last.toolCalls) {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: last.toolCalls.map((tc) =>
-                        tc.id === data.id ? { ...tc, error: data.error, status: "error" as const } : tc
-                      ),
-                    };
-                  }
-                  return updated;
-                });
-                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-              } else if (currentEvent === "done") {
-                // Refresh sidebar after new conversation completes
-                fetchConversations();
-              } else if (currentEvent === "error") {
-                setIsThinking(false);
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  // Preserve partial assistant content (Pitfall 6) — only pop empty placeholders.
-                  if (
-                    last &&
-                    last.role === "assistant" &&
-                    !last.content &&
-                    (!last.toolCalls || last.toolCalls.length === 0)
-                  ) {
-                    updated.pop();
-                  }
-                  updated.push({
-                    role: "error",
-                    kind: "stream",
-                    content: data.detail || "The response was interrupted. Please try again.",
+                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                } else if (currentEvent === "tool_call_error") {
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last.role === "assistant" && last.toolCalls) {
+                      updated[updated.length - 1] = {
+                        ...last,
+                        toolCalls: last.toolCalls.map((tc) =>
+                          tc.id === data.id ? { ...tc, error: data.error, status: "error" as const } : tc
+                        ),
+                      };
+                    }
+                    return updated;
                   });
-                  return updated;
-                });
+                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                } else if (currentEvent === "done") {
+                  // Refresh sidebar after new conversation completes
+                  fetchConversations();
+                } else if (currentEvent === "error") {
+                  setIsThinking(false);
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    // Preserve partial assistant content (Pitfall 6) — only pop empty placeholders.
+                    if (
+                      last &&
+                      last.role === "assistant" &&
+                      !last.content &&
+                      (!last.toolCalls || last.toolCalls.length === 0)
+                    ) {
+                      updated.pop();
+                    }
+                    updated.push({
+                      role: "error",
+                      kind: "stream",
+                      content: data.detail || "The response was interrupted. Please try again.",
+                    });
+                    return updated;
+                  });
+                }
               }
             }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
     } catch {
       setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
