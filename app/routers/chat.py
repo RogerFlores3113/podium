@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 @router.get("/models")
 async def list_models():
-    """Return the list of models available for selection."""
+    """Return models available for selection, filtered by enabled providers."""
+    if not settings.ollama_base_url:
+        return [m for m in AVAILABLE_MODELS if m["provider"] != "ollama"]
     return AVAILABLE_MODELS
 
 
@@ -65,31 +67,6 @@ async def get_conversation(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
-
-
-@router.delete("/{conversation_id}")
-async def delete_conversation(
-    conversation_id: uuid.UUID,
-    user: User = Depends(get_or_create_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Hard-delete a conversation. Cascades to messages via FK ondelete=CASCADE.
-
-    Memory.source_conversation_id is set to NULL (FK ondelete=SET NULL),
-    preserving extracted memories with provenance link severed.
-    """
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == user.clerk_id,
-        )
-    )
-    conversation = result.scalar_one_or_none()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    await db.delete(conversation)
-    await db.commit()
-    return {"detail": "Conversation deleted"}
 
 
 @router.post("/stream")
@@ -150,12 +127,6 @@ async def chat_stream(
         db.add(conversation)
         await db.flush()
 
-    history = []
-    if body.conversation_id:
-        history = await build_conversation_history(
-            db, conversation.id, settings.memory_max_tokens
-        )
-
     user_message = Message(
         conversation_id=conversation.id,
         user_id=user_id,
@@ -164,6 +135,18 @@ async def chat_stream(
     )
     db.add(user_message)
     await db.flush()
+
+    history = []
+    if body.conversation_id:
+        history = await build_conversation_history(
+            db, conversation.id, settings.memory_max_tokens
+        )
+
+    # Validate model against active roster (MODEL-03 security: reject disabled Ollama models)
+    if body.model:
+        active_model_ids = {m["id"] for m in await list_models()}
+        if body.model not in active_model_ids:
+            raise HTTPException(status_code=422, detail="Model not available")
 
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
@@ -256,7 +239,6 @@ async def chat_stream(
                             "extract_memories_job",
                             str(conversation.id),
                             user_id,
-                            _job_id=f"extract:{conversation.id}",
                             _defer_by=settings.memory_extraction_delay,
                         )
                     except Exception as e:
@@ -280,7 +262,5 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": str(e)}),
             }
-        finally:
-            await db.commit()
 
-    return EventSourceResponse(event_generator(), sep="\n", ping=15)
+    return EventSourceResponse(event_generator())

@@ -12,7 +12,7 @@ from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
 
 # Models that use the OpenAI Responses API instead of Chat Completions.
-RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano"})
+RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano", "gpt-5.4-nano"})
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +331,11 @@ async def run_agent(
                 messages=messages,
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
                 api_key=resolved_api_key,
+                api_base=(
+                    settings.ollama_base_url
+                    if resolved_model.startswith("ollama/")
+                    else None
+                ),
                 max_tokens=1500,
                 stream=True,
             )
@@ -345,6 +350,8 @@ async def run_agent(
         # Keyed by index because tool calls arrive as deltas with an index field.
 
         async for chunk in response:
+            if chunk is None:
+                break
             delta = chunk.choices[0].delta
 
             # Handle text content — stream it to the frontend as it arrives

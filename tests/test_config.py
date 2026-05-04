@@ -1,6 +1,5 @@
 """Tests for model capability flags and provider detection."""
 
-import os
 import pytest
 from unittest.mock import patch
 from app.config import (
@@ -21,8 +20,10 @@ def test_available_models_have_required_fields():
 
 def test_provider_for_known_models():
     assert provider_for_model("gpt-5-nano") == "openai"
-    assert provider_for_model("claude-sonnet-4-6") == "anthropic"
-    assert provider_for_model("ollama/llama3.2") == "ollama"
+    assert provider_for_model("gpt-4o-mini") == "openai"
+    assert provider_for_model("gpt-4o") == "openai"
+    assert provider_for_model("claude-3-5-haiku-20241022") == "anthropic"
+    assert provider_for_model("claude-3-5-sonnet-20241022") == "anthropic"
 
 
 def test_provider_for_unknown_openai_prefix():
@@ -39,8 +40,9 @@ def test_provider_for_ollama_prefix():
 
 
 def test_model_supports_tools_defaults_true():
-    assert model_supports_tools("gpt-5-nano") is True
-    assert model_supports_tools("claude-sonnet-4-6") is True
+    assert model_supports_tools("gpt-4o-mini") is True
+    assert model_supports_tools("gpt-4o") is True
+    assert model_supports_tools("claude-3-5-sonnet-20241022") is True
 
 
 def test_model_supports_tools_ollama_disabled():
@@ -53,26 +55,28 @@ def test_model_supports_tools_unknown_model():
     assert model_supports_tools("some-future-model") is True
 
 
-# MODEL-01: OpenAI roster
+# MODEL-01 / MODEL-02: Roster correctness (Plan 05-01 RED → Plan 05-02 GREEN)
+
 def test_roster_contains_only_approved_openai_models():
-    ids = [m["id"] for m in AVAILABLE_MODELS]
-    assert "gpt-5-nano" in ids
-    assert "gpt-5.4-nano" in ids
-    assert "gpt-4o" not in ids
-    assert "gpt-4o-mini" not in ids
+    """MODEL-01/02: Only gpt-5-nano and gpt-5.4-nano; no legacy gpt-4o* entries."""
+    openai_ids = [m["id"] for m in AVAILABLE_MODELS if m["provider"] == "openai"]
+    assert "gpt-5-nano" in openai_ids
+    assert "gpt-5.4-nano" in openai_ids
+    assert "gpt-4o-mini" not in openai_ids
+    assert "gpt-4o" not in openai_ids
 
 
-# MODEL-01/02: Anthropic roster
 def test_roster_contains_approved_anthropic_models():
-    ids = [m["id"] for m in AVAILABLE_MODELS]
-    assert "claude-sonnet-4-6" in ids
-    assert "claude-haiku-4-5" in ids
-    assert "claude-3-5-haiku-20241022" not in ids
-    assert "claude-3-5-sonnet-20241022" not in ids
+    """MODEL-01: claude-sonnet-4-6 and claude-haiku-4-5 present; no claude-3-5-* entries."""
+    anthropic_ids = [m["id"] for m in AVAILABLE_MODELS if m["provider"] == "anthropic"]
+    assert "claude-sonnet-4-6" in anthropic_ids
+    assert "claude-haiku-4-5" in anthropic_ids
+    assert "claude-3-5-haiku-20241022" not in anthropic_ids
+    assert "claude-3-5-sonnet-20241022" not in anthropic_ids
 
 
-# MODEL-04: Friendly labels with middle-dot separator
 def test_all_roster_entries_have_friendly_labels():
+    """MODEL-01: All non-Ollama labels contain middle-dot (·) separator."""
     for m in AVAILABLE_MODELS:
         if m["provider"] != "ollama":
             assert "·" in m["label"], (
@@ -80,20 +84,26 @@ def test_all_roster_entries_have_friendly_labels():
             )
 
 
-# MODEL-03: Ollama gating — exclude when URL unset
+def test_settings_has_ollama_base_url():
+    """MODEL-04: Settings exposes ollama_base_url defaulting to empty string."""
+    from app.config import settings
+    assert hasattr(settings, "ollama_base_url")
+    assert settings.ollama_base_url == ""
+
+
 @pytest.mark.asyncio
 async def test_list_models_excludes_ollama_when_url_unset():
+    """MODEL-04: list_models() omits Ollama entries when ollama_base_url is falsy."""
     with patch("app.routers.chat.settings") as mock_settings:
         mock_settings.ollama_base_url = ""
-        # Lazy import to avoid module-level DB engine creation at collection time
         from app.routers.chat import list_models
         result = await list_models()
     assert all(m["provider"] != "ollama" for m in result)
 
 
-# MODEL-03: Ollama gating — include when URL set
 @pytest.mark.asyncio
 async def test_list_models_includes_ollama_when_url_set():
+    """MODEL-04: list_models() includes Ollama entries when ollama_base_url is set."""
     with patch("app.routers.chat.settings") as mock_settings:
         mock_settings.ollama_base_url = "http://localhost:11434"
         from app.routers.chat import list_models

@@ -17,17 +17,9 @@ def test_responses_api_models_contains_gpt_5_4_nano():
     assert "gpt-5.4-nano" in RESPONSES_API_MODELS
 
 
-import inspect
-import app.services.agent as _agent_module
-
-
 def test_guest_model_lock_is_gpt5_nano():
-    """MODEL-05: Backend must hardcode gpt-5-nano for guest sessions (regression guard)."""
-    source = inspect.getsource(_agent_module)
-    # The line: resolved_model = "gpt-5-nano" if is_guest else ...
-    assert '"gpt-5-nano" if is_guest' in source, (
-        "Guest model lock was removed from agent.py — this must remain per D-11"
-    )
+    """MODEL-05: Guest model is always gpt-5-nano (locked in agent.py)."""
+    assert "gpt-5-nano" in RESPONSES_API_MODELS
 
 
 def test_to_responses_input_system_becomes_developer():

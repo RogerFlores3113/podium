@@ -10,11 +10,14 @@ CORS_ORIGINS = [
 
 # Models available for selection. Provider drives which BYOK key is used.
 AVAILABLE_MODELS: list[dict] = [
-    {"id": "gpt-5-nano", "label": "GPT-5 nano", "provider": "openai"},
-    {"id": "gpt-4o-mini", "label": "GPT-4o mini", "provider": "openai"},
-    {"id": "gpt-4o", "label": "GPT-4o", "provider": "openai"},
-    {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku", "provider": "anthropic"},
-    {"id": "claude-3-5-sonnet-20241022", "label": "Claude 3.5 Sonnet", "provider": "anthropic"},
+    {"id": "gpt-5-nano",        "label": "GPT-5 nano · fast",         "provider": "openai"},
+    {"id": "gpt-5.4-nano",      "label": "GPT-5.4 nano · capable",    "provider": "openai"},
+    {"id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6 · smart", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5",  "label": "Claude Haiku 4.5 · fast",   "provider": "anthropic"},
+    # Ollama entries — always in config; filtered in list_models() when OLLAMA_BASE_URL unset
+    {"id": "ollama/llama3.2",   "label": "Llama 3.2 (local)",         "provider": "ollama"},
+    {"id": "ollama/mistral",    "label": "Mistral (local)",            "provider": "ollama"},
+    {"id": "ollama/codellama",  "label": "Code Llama (local)",         "provider": "ollama"},
 ]
 
 # Per-model capability flags. Models not listed default to tools=True.
@@ -100,6 +103,10 @@ class Settings(BaseSettings):
     memory_retrieval_top_k: int = 5
     memory_core_always_inject: int = 10
     memory_extraction_delay: int = 60
+
+    # Ollama — local/dev models; empty string = Ollama disabled
+    ollama_base_url: str = ""  # e.g. http://localhost:11434
+
     model_config = {"env_file": ".env"}
 
 
