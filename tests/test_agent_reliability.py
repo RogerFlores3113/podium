@@ -382,3 +382,252 @@ def test_system_prompt_tells_agent_not_to_save_temporary_context():
     assert "temporary" in prompt_lower or "do not save" in prompt_lower or "don't save" in prompt_lower, (
         "AGENT_SYSTEM_PROMPT must include guidance to avoid saving temporary task context"
     )
+
+
+# ---------------------------------------------------------------------------
+# GAP: Guest addendum injected into system prompt
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_guest_system_prompt_contains_addendum():
+    """run_agent with is_guest=True must inject a guest addendum mentioning memory_save is unavailable."""
+    from app.services.agent import run_agent
+
+    captured_messages = []
+
+    async def fake_acompletion(**kwargs):
+        # Capture the messages list and return a minimal response
+        captured_messages.extend(kwargs.get("messages", []))
+        return _make_async_stream([_make_text_chunk("I can help with that.")])
+
+    db = _mock_db()
+    events = []
+
+    with patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        async for event in run_agent(
+            db=db,
+            user_id="guest-u1",
+            user_message="Remember that I like Python.",
+            conversation_history=[],
+            api_key="sk-test",
+            model="gpt-4o",  # non-Responses-API model to use acompletion path
+            is_guest=True,
+            effort="fast",
+        ):
+            events.append(event)
+
+    system_messages = [m for m in captured_messages if m.get("role") == "system"]
+    assert system_messages, "A system message must be present in the messages list"
+    system_content = system_messages[0]["content"]
+    assert "memory_save is not available" in system_content, (
+        "Guest system prompt must contain 'memory_save is not available' from the guest addendum"
+    )
+
+
+# ---------------------------------------------------------------------------
+# GAP: memory_search guideline tightened
+# ---------------------------------------------------------------------------
+
+def test_memory_search_guideline_is_tightened():
+    """AGENT_SYSTEM_PROMPT must not contain the overly permissive memory_search guideline."""
+    from app.services.agent import AGENT_SYSTEM_PROMPT
+    assert "or when past context might improve your answer" not in AGENT_SYSTEM_PROMPT, (
+        "The permissive memory_search guideline must be removed from AGENT_SYSTEM_PROMPT"
+    )
+
+
+# ---------------------------------------------------------------------------
+# GAP: Effort-aware reasoning level in _run_responses_agent
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_responses_api_effort_fast_maps_to_low():
+    """_run_responses_agent with effort='fast' must pass reasoning={'effort': 'low', 'summary': 'auto'}."""
+    from app.services.agent import _run_responses_agent
+
+    db = _mock_db()
+
+    async def _text_stream():
+        event = MagicMock()
+        event.type = "response.output_text.delta"
+        event.delta = "Answer."
+        yield event
+
+    mock_response = MagicMock()
+    mock_response.__aiter__ = lambda self: _text_stream()
+
+    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.responses.create = AsyncMock(return_value=mock_response)
+
+        events = []
+        async for event in _run_responses_agent(
+            db=db,
+            user_id="u1",
+            input_messages=[{"role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            responses_tools=[],
+            api_key="sk-test",
+            model="gpt-5-nano",
+            is_guest=False,
+            effort="fast",
+        ):
+            events.append(event)
+
+    call_kwargs = mock_client.responses.create.call_args
+    reasoning_arg = call_kwargs.kwargs.get("reasoning") or call_kwargs[1].get("reasoning")
+    assert reasoning_arg == {"effort": "low", "summary": "auto"}, (
+        f"effort='fast' must map to reasoning={{'effort': 'low', 'summary': 'auto'}}, got {reasoning_arg}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_responses_api_effort_balanced_maps_to_medium():
+    """_run_responses_agent with effort='balanced' must pass reasoning={'effort': 'medium', 'summary': 'auto'}."""
+    from app.services.agent import _run_responses_agent
+
+    db = _mock_db()
+
+    async def _text_stream():
+        event = MagicMock()
+        event.type = "response.output_text.delta"
+        event.delta = "Answer."
+        yield event
+
+    mock_response = MagicMock()
+    mock_response.__aiter__ = lambda self: _text_stream()
+
+    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.responses.create = AsyncMock(return_value=mock_response)
+
+        events = []
+        async for event in _run_responses_agent(
+            db=db,
+            user_id="u1",
+            input_messages=[{"role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            responses_tools=[],
+            api_key="sk-test",
+            model="gpt-5-nano",
+            is_guest=False,
+            effort="balanced",
+        ):
+            events.append(event)
+
+    call_kwargs = mock_client.responses.create.call_args
+    reasoning_arg = call_kwargs.kwargs.get("reasoning") or call_kwargs[1].get("reasoning")
+    assert reasoning_arg == {"effort": "medium", "summary": "auto"}, (
+        f"effort='balanced' must map to reasoning={{'effort': 'medium', 'summary': 'auto'}}, got {reasoning_arg}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_responses_api_effort_thorough_maps_to_high():
+    """_run_responses_agent with effort='thorough' must pass reasoning={'effort': 'high', 'summary': 'auto'}."""
+    from app.services.agent import _run_responses_agent
+
+    db = _mock_db()
+
+    async def _text_stream():
+        event = MagicMock()
+        event.type = "response.output_text.delta"
+        event.delta = "Answer."
+        yield event
+
+    mock_response = MagicMock()
+    mock_response.__aiter__ = lambda self: _text_stream()
+
+    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.responses.create = AsyncMock(return_value=mock_response)
+
+        events = []
+        async for event in _run_responses_agent(
+            db=db,
+            user_id="u1",
+            input_messages=[{"role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            responses_tools=[],
+            api_key="sk-test",
+            model="gpt-5-nano",
+            is_guest=False,
+            effort="thorough",
+        ):
+            events.append(event)
+
+    call_kwargs = mock_client.responses.create.call_args
+    reasoning_arg = call_kwargs.kwargs.get("reasoning") or call_kwargs[1].get("reasoning")
+    assert reasoning_arg == {"effort": "high", "summary": "auto"}, (
+        f"effort='thorough' must map to reasoning={{'effort': 'high', 'summary': 'auto'}}, got {reasoning_arg}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# GAP: Per-effort max_tokens on litellm path
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_litellm_fast_effort_uses_600_max_tokens():
+    """run_agent with effort='fast' on a non-Responses-API model must call acompletion with max_tokens=600."""
+    from app.services.agent import run_agent
+
+    db = _mock_db()
+    captured_kwargs = []
+
+    async def fake_acompletion(**kwargs):
+        captured_kwargs.append(kwargs)
+        return _make_async_stream([_make_text_chunk("Answer.")])
+
+    with patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        async for _ in run_agent(
+            db=db,
+            user_id="u1",
+            user_message="Help me.",
+            conversation_history=[],
+            api_key="sk-test",
+            model="gpt-4o",
+            is_guest=False,
+            effort="fast",
+        ):
+            pass
+
+    assert captured_kwargs, "acompletion must be called"
+    max_tokens_used = captured_kwargs[0].get("max_tokens")
+    assert max_tokens_used == 600, (
+        f"effort='fast' must use max_tokens=600, got {max_tokens_used}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_litellm_balanced_effort_uses_1500_max_tokens():
+    """run_agent with effort='balanced' on a non-Responses-API model must call acompletion with max_tokens=1500."""
+    from app.services.agent import run_agent
+
+    db = _mock_db()
+    captured_kwargs = []
+
+    async def fake_acompletion(**kwargs):
+        captured_kwargs.append(kwargs)
+        return _make_async_stream([_make_text_chunk("Answer.")])
+
+    with patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        with patch("app.services.agent._actor_critic", new_callable=AsyncMock) as mock_critic:
+            mock_critic.return_value = "Answer."
+            async for _ in run_agent(
+                db=db,
+                user_id="u1",
+                user_message="Help me.",
+                conversation_history=[],
+                api_key="sk-test",
+                model="gpt-4o",
+                is_guest=False,
+                effort="balanced",
+            ):
+                pass
+
+    assert captured_kwargs, "acompletion must be called"
+    max_tokens_used = captured_kwargs[0].get("max_tokens")
+    assert max_tokens_used == 1500, (
+        f"effort='balanced' must use max_tokens=1500, got {max_tokens_used}"
+    )

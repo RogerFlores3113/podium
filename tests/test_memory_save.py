@@ -68,3 +68,71 @@ async def test_memory_save_normalizes_invalid_category_to_context():
     assert memories_arg[0]["category"] == "context", (
         "Unrecognized category 'personal' must be normalized to 'context'"
     )
+
+
+# ---------------------------------------------------------------------------
+# GAP: Dedup — persist_memories cosine similarity guard
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_persist_memories_dedup_skips_duplicate_on_high_similarity():
+    """Saving the same memory twice skips the second insert when similarity >= 0.95 (GAP dedup)."""
+    from app.services.memory import persist_memories
+
+    unit_vector = [1.0] + [0.0] * 1535  # 1536-dim unit vector
+
+    # Fake row returned by dedup query: similarity above threshold
+    fake_row = MagicMock()
+    fake_row.similarity = 0.96
+
+    fake_result = MagicMock()
+    fake_result.fetchone.return_value = fake_row
+
+    db = _mock_db()
+    db.execute.return_value = fake_result
+
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+        mock_embed.return_value = [unit_vector]
+
+        count = await persist_memories(
+            db=db,
+            user_id="u1",
+            conversation_id=None,
+            memories=[{"category": "preference", "content": "User prefers Python."}],
+        )
+
+    # Dedup should fire — db.add must NOT be called and count must be 0
+    db.add.assert_not_called()
+    assert count == 0, f"Expected 0 memories saved (duplicate skipped), got {count}"
+
+
+@pytest.mark.asyncio
+async def test_persist_memories_dedup_inserts_when_low_similarity():
+    """Saving a semantically different memory still inserts when similarity < 0.95 (GAP dedup)."""
+    from app.services.memory import persist_memories
+
+    vector_a = [1.0] + [0.0] * 1535  # 1536-dim
+
+    # Fake row with low similarity — should NOT trigger dedup
+    fake_row = MagicMock()
+    fake_row.similarity = 0.50
+
+    fake_result = MagicMock()
+    fake_result.fetchone.return_value = fake_row
+
+    db = _mock_db()
+    db.execute.return_value = fake_result
+
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+        mock_embed.return_value = [vector_a]
+
+        count = await persist_memories(
+            db=db,
+            user_id="u1",
+            conversation_id=None,
+            memories=[{"category": "preference", "content": "User prefers JavaScript."}],
+        )
+
+    # Low similarity → should insert
+    db.add.assert_called_once()
+    assert count == 1, f"Expected 1 memory saved (different content), got {count}"
