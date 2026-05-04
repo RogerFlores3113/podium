@@ -1047,3 +1047,251 @@ describe("synthesis gap indicator", () => {
     );
   });
 });
+
+describe("effort selector", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+    localStorage.clear();
+  });
+
+  it("renders a <select> with Fast, Balanced, Thorough options defaulting to Balanced", async () => {
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const effortSelect = screen.getByLabelText("Select effort level") as HTMLSelectElement;
+    expect(effortSelect).toBeTruthy();
+    expect(effortSelect.value).toBe("balanced");
+    expect(effortSelect.querySelector('option[value="fast"]')?.textContent).toBe("Fast");
+    expect(effortSelect.querySelector('option[value="balanced"]')?.textContent).toBe("Balanced");
+    expect(effortSelect.querySelector('option[value="thorough"]')?.textContent).toBe("Thorough");
+  });
+
+  it("persists selected effort to localStorage on change", async () => {
+    const user = userEvent.setup();
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const effortSelect = screen.getByLabelText("Select effort level");
+    await user.selectOptions(effortSelect, "fast");
+
+    expect(localStorage.getItem("selectedEffort")).toBe("fast");
+  });
+
+  it("reads selectedEffort from localStorage on mount", async () => {
+    localStorage.setItem("selectedEffort", "thorough");
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const effortSelect = screen.getByLabelText("Select effort level") as HTMLSelectElement;
+    expect(effortSelect.value).toBe("thorough");
+  });
+
+  it("ignores invalid localStorage values and defaults to balanced", async () => {
+    localStorage.setItem("selectedEffort", "invalid-value");
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const effortSelect = screen.getByLabelText("Select effort level") as HTMLSelectElement;
+    expect(effortSelect.value).toBe("balanced");
+  });
+
+  it("is disabled for guest users", async () => {
+    sessionStorage.setItem("podium_guest_token", "tok");
+    sessionStorage.setItem(
+      "podium_guest_expires",
+      new Date(Date.now() + 86400000).toISOString(),
+    );
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const effortSelect = screen.getByLabelText(
+      "Effort selection unavailable for guest accounts",
+    ) as HTMLSelectElement;
+    expect(effortSelect.disabled).toBe(true);
+  });
+
+  it("includes effort in the POST body when a message is submitted", async () => {
+    const user = userEvent.setup();
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
+    // Stream response for the submit
+    fetchSpy.mockResolvedValueOnce(
+      makeSSEResponse([
+        { event: "conversation", data: { conversation_id: "c-new" } },
+        { event: "token", data: { token: "ok" } },
+        { event: "done", data: { conversation_id: "c-new" } },
+      ]),
+    );
+
+    render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    // Change effort to "thorough"
+    const effortSelect = screen.getByLabelText("Select effort level");
+    await user.selectOptions(effortSelect, "thorough");
+
+    // Submit a message
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      const streamCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
+        String(url).includes("/chat/stream"),
+      );
+      expect(streamCalls.length).toBeGreaterThan(0);
+      const [, opts] = streamCalls[0] as [string, RequestInit];
+      const body = JSON.parse(opts.body as string);
+      expect(body.effort).toBe("thorough");
+    });
+  });
+});
+
+describe("ollama model fetch timing", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockIsSignedIn = undefined;
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  it("does NOT fetch ollama-models at mount when isSignedIn is undefined", async () => {
+    mockIsSignedIn = undefined;
+    mockMountFetches(fetchSpy);
+    render(<ChatPage />);
+    // Wait for mount effects to settle
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    // Give any async work a tick
+    await new Promise((r) => setTimeout(r, 20));
+
+    const ollamaCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
+      String(url).includes("ollama-models"),
+    );
+    expect(ollamaCalls.length).toBe(0);
+  });
+
+  it("fetches ollama-models in the isSignedIn effect when isSignedIn becomes true", async () => {
+    mockIsSignedIn = undefined;
+    mockMountFetches(fetchSpy);
+
+    // Slot 3: ollama-models — fires when isSignedIn effect runs
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([{ id: "ollama/llama3", label: "llama3 (local)", provider: "ollama" }]),
+        { status: 200 },
+      ),
+    );
+
+    const { rerender } = render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    // Simulate Clerk confirming sign-in
+    mockIsSignedIn = true;
+    // Also need conversations slot for the fetchConversations call in isSignedIn effect
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    rerender(<ChatPage />);
+
+    await waitFor(() => {
+      const ollamaCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
+        String(url).includes("ollama-models"),
+      );
+      expect(ollamaCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("does NOT fetch ollama-models for guest users even when isSignedIn is true", async () => {
+    sessionStorage.setItem("podium_guest_token", "tok");
+    sessionStorage.setItem(
+      "podium_guest_expires",
+      new Date(Date.now() + 86400000).toISOString(),
+    );
+    mockIsSignedIn = undefined;
+    mockMountFetches(fetchSpy);
+    // Slot 3 (temporary): ollama-models still fires at mount until Plan 02 moves it
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
+    const { rerender } = render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    // Even if Clerk says signed-in, guest flag should block ollama fetch
+    mockIsSignedIn = true;
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    rerender(<ChatPage />);
+
+    await new Promise((r) => setTimeout(r, 30));
+
+    const ollamaCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
+      String(url).includes("ollama-models"),
+    );
+    expect(ollamaCalls.length).toBe(0);
+  });
+
+  it("merges ollama models into availableModels using functional updater (no stale state)", async () => {
+    mockIsSignedIn = undefined;
+    mockMountFetches(fetchSpy);
+
+    // Ollama fetch returns one model
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([{ id: "ollama/llama3", label: "llama3 (local)", provider: "ollama" }]),
+        { status: 200 },
+      ),
+    );
+
+    const { rerender } = render(<ChatPage />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    mockIsSignedIn = true;
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    rerender(<ChatPage />);
+
+    // After isSignedIn effect runs, the model picker should include the Ollama model
+    await waitFor(() => {
+      // The select element for model should have an ollama option
+      const modelSelect = screen.getByLabelText(/select model/i) as HTMLSelectElement;
+      const ollamaOption = modelSelect.querySelector('option[value="ollama/llama3"]');
+      expect(ollamaOption).toBeTruthy();
+    });
+  });
+});
