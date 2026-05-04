@@ -48,3 +48,24 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* Markdown prose link styling (UX-03) */
+.prose a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.prose a:hover {
+  text-decoration: underline;
+}
+[data-theme="dark"] .prose a {
+  color: #60a5fa;
+}
+
+/* Markdown inline code styling (UX-03) — scoped to avoid double-styling pre > code blocks */
+.prose :not(pre) > code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-size: 0.875em;
+}

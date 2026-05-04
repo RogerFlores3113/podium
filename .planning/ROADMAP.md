@@ -146,7 +146,7 @@ Coverage (v1.0):
   1. A guest user on the Anthropic or Ollama provider receives the correct system key for that provider — the OpenAI system key is never passed to a non-OpenAI endpoint.
   2. After any chat stream ends (normally or via error), the SSE reader lock is released — no "stream is locked" errors appear in subsequent requests on the same connection.
   3. A developer-supplied Ollama URL containing `localhost` is automatically rewritten to `host.docker.internal` when running in a Docker context, or the UI surfaces clear guidance about the required URL format.
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [x] 07-01-PLAN.md — Implement OLL-02 normalize_ollama_url utility, wire at agent.py and chat.py call sites, and verify pre-done DEBT-01/DEBT-02
@@ -164,8 +164,11 @@ Plans:
   6. A continuously-visible in-progress indicator appears during the synthesis gap — the period after tool results arrive and before the first synthesis token — so the user never sees a blank wait.
   7. Agent processing status is shown as a max-3-word label outside the chat bubble (e.g., "Searching web…", "Thinking…").
   8. Assistant messages render as markdown; links are blue and underline on hover.
-**Plans:** TBD
-**UI hint**: yes
+**Plans:** 2 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — All ChatPage.tsx fixes: UI-01/02/03/04, DEBT-03, UX-01/02 + test suite (Wave 1)
+- [ ] 08-02-PLAN.md — globals.css markdown link/code styling: UX-03 (Wave 1, parallel)
 
 ### Phase 9: Memory & Agent Core
 **Goal:** The agent can proactively save memories during conversation, and its reasoning quality is improved through prompt auditing and a self-critique pass.
@@ -223,11 +226,11 @@ Plans:
 | 4. Loading & Error UX | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 5. Model Roster & Ollama | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 6. PR #14 Audit & Smoke Test | v1.0 | 4/4 | Complete | 2026-05-04 |
-| 7. Backend Debt & Security | v2.0 | 1/1 | Complete | 2026-05-04 |
-| 8. Frontend Bugs & Polish | v2.0 | 0/TBD | Not started | - |
+| 7. Backend Debt & Security | v2.0 | 1/1 | Complete    | 2026-05-04 |
+| 8. Frontend Bugs & Polish | v2.0 | 0/2 | Not started | - |
 | 9. Memory & Agent Core | v2.0 | 0/TBD | Not started | - |
 | 10. Agent UI & Dynamic Ollama | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap defined: 2026-05-03 (v1.0) / 2026-05-04 (v2.0 phases added)*
-*Last updated: 2026-05-04 — Phase 7 complete (OLL-02 implemented; DEBT-01/02 verified). 1/4 v2.0 phases done.*
+*Last updated: 2026-05-04 — Phase 8 planned (2 plans, 1 wave).*
