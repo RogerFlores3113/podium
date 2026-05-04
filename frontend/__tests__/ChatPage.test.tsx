@@ -197,7 +197,7 @@ describe("ChatPage sidebar delete", () => {
 
     // Verify DELETE was called with the correct URL and method
     const deleteCalls = fetchSpy.mock.calls.filter(
-      ([url, opts]) =>
+      ([url, opts]: [unknown, RequestInit | undefined]) =>
         typeof url === "string" &&
         url.endsWith(`/chat/c1`) &&
         opts?.method === "DELETE"
@@ -291,8 +291,8 @@ describe("ChatPage sidebar delete", () => {
 
     const newCalls = fetchSpy.mock.calls.slice(fetchCallsBefore);
     const loadCalls = newCalls.filter(
-      ([url]) =>
-        typeof url === "string" && url.match(/\/chat\/c2$/) && !newCalls.find(([, opts]) => opts?.method === "DELETE")
+      ([url]: [unknown, RequestInit | undefined]) =>
+        typeof url === "string" && url.match(/\/chat\/c2$/) && !newCalls.find(([, opts]: [unknown, RequestInit | undefined]) => opts?.method === "DELETE")
     );
     expect(loadCalls.length).toBe(0);
   });
@@ -677,7 +677,7 @@ describe("ChatPage multi-line composer", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+      const submitCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
         String(url).includes("/chat/stream"),
       );
       expect(submitCalls.length).toBeGreaterThan(0);
@@ -702,7 +702,7 @@ describe("ChatPage multi-line composer", () => {
     // Wave 2: composer is <textarea> — value preserves the newline.
     expect(composer.value).toBe("Line 1\nLine 2");
 
-    const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+    const submitCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
       String(url).includes("/chat/stream"),
     );
     expect(submitCalls.length).toBe(0);
@@ -724,7 +724,7 @@ describe("ChatPage multi-line composer", () => {
 
     await new Promise((r) => setTimeout(r, 20));
 
-    const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+    const submitCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
       String(url).includes("/chat/stream"),
     );
     expect(submitCalls.length).toBe(0);

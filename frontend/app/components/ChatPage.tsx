@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { UserButton } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -31,11 +32,32 @@ const CAPABILITY_CARDS = [
 const WELCOME_MESSAGE =
   "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  toolCalls?: ToolCall[];
-}
+const TOOL_PHASE_COPY: Record<string, string> = {
+  web_search: "Searching the web…",
+  document_search: "Reading uploaded documents…",
+  url_reader: "Reading source…",
+  python_executor: "Running code…",
+  memory_search: "Recalling earlier conversations…",
+};
+const toolPhaseCopy = (name: string): string =>
+  TOOL_PHASE_COPY[name] ?? `Working on ${name}…`;
+
+type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
+
+const ERROR_COPY: Record<ErrorKind, string> = {
+  byok: "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+  limit: "You've reached the guest message limit. Sign up to keep chatting.",
+  server: "Something went wrong on our end. Please try again in a moment.",
+  stream: "", // SSE error fills from data.detail
+  network: "Connection lost. Please check your network and try again.",
+};
+
+const MAX_POLL_ATTEMPTS = 60;
+
+interface UserMessage { role: "user"; content: string }
+interface AssistantMessage { role: "assistant"; content: string; toolCalls?: ToolCall[] }
+interface ErrorMessage { role: "error"; kind: ErrorKind; content: string }
+type Message = UserMessage | AssistantMessage | ErrorMessage;
 
 interface ConversationItem {
   id: string;
@@ -48,6 +70,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
@@ -172,30 +195,58 @@ export default function ChatPage() {
     setInput(prompt);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitMessage = async () => {
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setIsThinking(true);
 
+    let response: Response;
     try {
-      const response = await authFetch(`${API_URL}/chat/stream`, {
+      response = await authFetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
       });
+    } catch {
+      setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
 
-      if (response.status === 402) {
-        setByokError(true);
-        setMessages((prev) => prev.slice(0, -1)); // remove the empty assistant placeholder
-        setIsLoading(false);
-        return;
-      }
+    if (response.status === 402) {
+      setByokError(true);
+      setMessages((prev) => [...prev, { role: "error", kind: "byok", content: ERROR_COPY.byok }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
+    if (response.status === 429) {
+      let copy = ERROR_COPY.limit;
+      try {
+        const body = await response.json();
+        if (body?.detail?.message) copy = body.detail.message;
+      } catch { /* generic copy */ }
+      setMessages((prev) => [...prev, { role: "error", kind: "limit", content: copy }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
+    if (!response.ok) {
+      // 5xx (or any other non-2xx). DO NOT read body — Pitfall 2 + V7.
+      setMessages((prev) => [...prev, { role: "error", kind: "server", content: ERROR_COPY.server }]);
+      setIsThinking(false);
+      setIsLoading(false);
+      return;
+    }
 
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+    try {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No reader available");
@@ -224,31 +275,39 @@ export default function ChatPage() {
               if (currentEvent === "conversation") {
                 setConversationId(data.conversation_id);
               } else if (currentEvent === "token") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant") {
-                    updated[updated.length - 1] = { ...last, content: last.content + data.token };
-                  }
-                  return updated;
+                // flushSync ensures each token renders immediately (visible streaming).
+                flushSync(() => {
+                  setIsThinking(false);
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last.role === "assistant") {
+                      updated[updated.length - 1] = { ...last, content: last.content + data.token };
+                    }
+                    return updated;
+                  });
                 });
               } else if (currentEvent === "tool_call_start") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === "assistant") {
-                    const newToolCall: ToolCall = {
-                      id: data.id,
-                      name: data.name,
-                      arguments: data.arguments,
-                      status: "running",
-                    };
-                    updated[updated.length - 1] = {
-                      ...last,
-                      toolCalls: [...(last.toolCalls || []), newToolCall],
-                    };
-                  }
-                  return updated;
+                // flushSync ensures the "running" phase copy renders before the result arrives.
+                flushSync(() => {
+                  setIsThinking(false);
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last.role === "assistant") {
+                      const newToolCall: ToolCall = {
+                        id: data.id,
+                        name: data.name,
+                        arguments: data.arguments,
+                        status: "running",
+                      };
+                      updated[updated.length - 1] = {
+                        ...last,
+                        toolCalls: [...(last.toolCalls || []), newToolCall],
+                      };
+                    }
+                    return updated;
+                  });
                 });
               } else if (currentEvent === "tool_call_result") {
                 setMessages((prev) => {
@@ -283,27 +342,43 @@ export default function ChatPage() {
               } else if (currentEvent === "done") {
                 // Refresh sidebar after new conversation completes
                 fetchConversations();
+              } else if (currentEvent === "error") {
+                setIsThinking(false);
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  // Preserve partial assistant content (Pitfall 6) — only pop empty placeholders.
+                  if (
+                    last &&
+                    last.role === "assistant" &&
+                    !last.content &&
+                    (!last.toolCalls || last.toolCalls.length === 0)
+                  ) {
+                    updated.pop();
+                  }
+                  updated.push({
+                    role: "error",
+                    kind: "stream",
+                    content: data.detail || "The response was interrupted. Please try again.",
+                  });
+                  return updated;
+                });
               }
             }
           }
         }
       }
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages((prev) => {
-        const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === "assistant") {
-          updated[updated.length - 1] = {
-            ...last,
-            content: "Something went wrong. Please try again.",
-          };
-        }
-        return updated;
-      });
+    } catch {
+      setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
     }
 
+    setIsThinking(false);
     setIsLoading(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMessage();
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -327,16 +402,37 @@ export default function ChatPage() {
       setUploadStatus(`Processing: ${doc.filename}`);
 
       if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+      let attempts = 0;
       uploadPollRef.current = setInterval(async () => {
-        const statusRes = await authFetch(`${API_URL}/documents/${doc.id}`);
-        const statusDoc = await statusRes.json();
-
-        if (statusDoc.status === "ready") {
-          setUploadStatus(`Ready: ${statusDoc.filename} (${statusDoc.page_count} pages)`);
+        attempts += 1;
+        if (attempts > MAX_POLL_ATTEMPTS) {
           if (uploadPollRef.current) clearInterval(uploadPollRef.current);
-        } else if (statusDoc.status === "failed") {
-          setUploadStatus(`Failed: ${statusDoc.filename}`);
+          uploadPollRef.current = null;
+          setUploadStatus(`Upload taking too long: ${doc.filename}`);
+          return;
+        }
+        try {
+          const statusRes = await authFetch(`${API_URL}/documents/${doc.id}`);
+          // Stale-tick guard (Pitfall 4): another tick may have cleared the interval while we awaited.
+          if (uploadPollRef.current === null) return;
+          if (!statusRes.ok) throw new Error(`status ${statusRes.status}`);
+          const statusDoc = await statusRes.json();
+          if (uploadPollRef.current === null) return;
+          if (statusDoc.status === "ready") {
+            setUploadStatus(
+              `Ready: ${statusDoc.filename} (${statusDoc.page_count} pages)`,
+            );
+            clearInterval(uploadPollRef.current);
+            uploadPollRef.current = null;
+          } else if (statusDoc.status === "failed") {
+            setUploadStatus(`Failed: ${statusDoc.filename}`);
+            clearInterval(uploadPollRef.current);
+            uploadPollRef.current = null;
+          }
+        } catch {
           if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+          uploadPollRef.current = null;
+          setUploadStatus("Upload status check failed");
         }
       }, 1000);
     } catch {
@@ -567,7 +663,26 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto space-y-4 mb-4">
             {messages.map((msg, i) => (
               <div key={i}>
-                {msg.content && (
+                {msg.role === "error" && (
+                  <div
+                    className="flex justify-start mb-2"
+                    data-testid="error-bubble"
+                    role="alert"
+                  >
+                    <div
+                      className="max-w-[80%] rounded-lg px-4 py-2 text-sm"
+                      style={{
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        color: "#b91c1c",
+                      }}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                )}
+
+                {msg.role !== "error" && msg.content && (
                   <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-2`}>
                     <div
                       className="max-w-[80%] rounded-lg px-4 py-2"
@@ -590,15 +705,45 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                {msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
                   <div className="space-y-2 my-2">
                     {msg.toolCalls.map((tc) => (
-                      <ToolCallDisplay key={tc.id} toolCall={tc} />
+                      <div key={tc.id}>
+                        {tc.status === "running" && (
+                          <div
+                            className="text-xs italic mb-1"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {toolPhaseCopy(tc.name)}
+                          </div>
+                        )}
+                        <ToolCallDisplay toolCall={tc} />
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
             ))}
+
+            {isThinking && (
+              <div
+                className="flex justify-start mb-2"
+                data-testid="thinking-indicator"
+                role="status"
+                aria-label="Thinking"
+              >
+                <div
+                  className="rounded-lg px-4 py-2"
+                  style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}
+                >
+                  <span className="inline-flex gap-1">
+                    <span className="animate-pulse">·</span>
+                    <span className="animate-pulse" style={{ animationDelay: "150ms" }}>·</span>
+                    <span className="animate-pulse" style={{ animationDelay: "300ms" }}>·</span>
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Capability cards — shown only on fresh conversation */}
             {showCapabilityCards && (
@@ -626,16 +771,28 @@ export default function ChatPage() {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  submitMessage();
+                }
+              }}
               placeholder="Ask me anything…"
-              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+              rows={1}
+              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none resize-none"
               style={{
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border)",
                 color: "var(--text-primary)",
+                minHeight: "40px",
+                maxHeight: "200px",
               }}
               disabled={isLoading}
             />
