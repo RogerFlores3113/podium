@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Stable getToken reference — must not be re-created on each useAuth() call
@@ -41,6 +41,41 @@ function mockConversationList(
   fetchSpy.mockResolvedValueOnce(
     new Response(JSON.stringify(convs), { status: 200 })
   );
+}
+
+function makeSSEResponse(
+  events: Array<{ event: string; data: object }>,
+  status = 200,
+): Response {
+  const body =
+    events
+      .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}`)
+      .join("\n\n") + "\n\n";
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
+function streamingResponse(
+  headEvents: Array<{ event: string; data: object }>,
+  { close = true }: { close?: boolean } = {},
+): Response {
+  const body =
+    headEvents
+      .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}`)
+      .join("\n\n") + "\n\n";
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body));
+      if (close) controller.close();
+      // else leave open — caller must clean up via vi.restoreAllMocks()
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
 
 describe("ChatPage sidebar delete", () => {
@@ -260,5 +295,265 @@ describe("ChatPage sidebar delete", () => {
         typeof url === "string" && url.match(/\/chat\/c2$/) && !newCalls.find(([, opts]) => opts?.method === "DELETE")
     );
     expect(loadCalls.length).toBe(0);
+  });
+});
+
+describe("ChatPage thinking indicator", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("shows thinking indicator immediately after submit, before any SSE event lands", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    // /chat/stream returns a stream that never emits — locks open
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start() {
+            /* never enqueue, never close */
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+
+    // Submit the form (works for input or textarea)
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    expect(await screen.findByTestId("thinking-indicator")).toBeTruthy();
+  });
+
+  it("hides thinking indicator on first token event", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    // Stream stays open after one token so indicator presence can be observed
+    // pre-event and the indicator-cleared assertion lands once Wave 2 ships.
+    fetchSpy.mockResolvedValueOnce(
+      streamingResponse(
+        [
+          { event: "conversation", data: { conversation_id: "c-new" } },
+          { event: "token", data: { token: "Hi" } },
+        ],
+        { close: false },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    // Today: no indicator ever exists — this assertion fails (RED).
+    // Wave 2: indicator briefly exists before the token branch clears it.
+    await screen.findByTestId("thinking-indicator");
+    await waitFor(() =>
+      expect(screen.queryByTestId("thinking-indicator")).toBeNull(),
+    );
+  });
+
+  it("hides thinking indicator on first tool_call_start event (tool-first flow)", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      streamingResponse(
+        [
+          { event: "conversation", data: { conversation_id: "c-new" } },
+          {
+            event: "tool_call_start",
+            data: { id: "t1", name: "web_search", arguments: {} },
+          },
+        ],
+        { close: false },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    // Today: no indicator ever exists — fails (RED).
+    // Wave 2: indicator briefly exists then tool_call_start clears it.
+    await screen.findByTestId("thinking-indicator");
+    await waitFor(() =>
+      expect(screen.queryByTestId("thinking-indicator")).toBeNull(),
+    );
+  });
+});
+
+describe("ChatPage tool phase copy", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("renders 'Searching the web…' while web_search is running", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    // Stream emits start but no result — leave open so the running state persists
+    fetchSpy.mockResolvedValueOnce(
+      streamingResponse(
+        [
+          { event: "conversation", data: { conversation_id: "c-new" } },
+          {
+            event: "tool_call_start",
+            data: { id: "t1", name: "web_search", arguments: {} },
+          },
+        ],
+        { close: false },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    expect(await screen.findByText(/Searching the web…/i)).toBeTruthy();
+  });
+
+  it("removes the tool phase copy once tool_call_result lands", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    // Open stream — emit start (running), then result (done), then close.
+    fetchSpy.mockResolvedValueOnce(
+      streamingResponse(
+        [
+          { event: "conversation", data: { conversation_id: "c-new" } },
+          {
+            event: "tool_call_start",
+            data: { id: "t1", name: "web_search", arguments: {} },
+          },
+          { event: "tool_call_result", data: { id: "t1", result: "ok" } },
+          { event: "done", data: { conversation_id: "c-new" } },
+        ],
+        { close: true },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    // Today: phase copy is never rendered — this assertion fails (RED).
+    // Wave 2: copy renders briefly while running, then disappears on result.
+    // Note: with all events queued at once we can't reliably observe the
+    // running state, so this test asserts the copy was visible at any point
+    // by checking the "stably absent" condition AFTER drain. To make it
+    // RED today, we first assert presence at any point during the stream.
+    await waitFor(() => {
+      // At some point during the stream the copy must have rendered.
+      // Use the test's own fetchSpy timing: if Wave 2 is wired, the start
+      // event flips status to "running" and the copy is present synchronously
+      // with that state update.
+      expect(screen.queryByText(/Searching the web…/i)).toBeTruthy();
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/Searching the web…/i)).toBeNull(),
+    );
+  });
+});
+
+describe("ChatPage SSE error event", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("renders an error bubble when backend emits event: error", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      makeSSEResponse([
+        { event: "conversation", data: { conversation_id: "c-new" } },
+        { event: "error", data: { detail: "Tavily search unavailable" } },
+      ]),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    const bubble = await screen.findByTestId("error-bubble");
+    expect(bubble.textContent || "").toContain("Tavily search unavailable");
+  });
+
+  it("preserves partial assistant content when error arrives after tokens", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      makeSSEResponse([
+        { event: "conversation", data: { conversation_id: "c-new" } },
+        { event: "token", data: { token: "Based on the search resul" } },
+        { event: "error", data: { detail: "Stream interrupted" } },
+      ]),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    const bubble = await screen.findByTestId("error-bubble");
+    expect(bubble.textContent || "").toContain("Stream interrupted");
+    // Partial assistant content must remain visible
+    expect(screen.getByText(/Based on the search resul/)).toBeTruthy();
   });
 });
