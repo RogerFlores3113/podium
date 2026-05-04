@@ -14,18 +14,11 @@ AVAILABLE_MODELS: list[dict] = [
     {"id": "gpt-5.4-nano",      "label": "GPT-5.4 nano · capable",    "provider": "openai"},
     {"id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6 · smart", "provider": "anthropic"},
     {"id": "claude-haiku-4-5",  "label": "Claude Haiku 4.5 · fast",   "provider": "anthropic"},
-    # Ollama entries — always in config; filtered in list_models() when OLLAMA_BASE_URL unset
-    {"id": "ollama/llama3.2",   "label": "Llama 3.2 (local)",         "provider": "ollama"},
-    {"id": "ollama/mistral",    "label": "Mistral (local)",            "provider": "ollama"},
-    {"id": "ollama/codellama",  "label": "Code Llama (local)",         "provider": "ollama"},
 ]
 
 # Per-model capability flags. Models not listed default to tools=True.
-MODEL_CAPABILITIES: dict[str, dict] = {
-    "ollama/llama3.2": {"tools": False},
-    "ollama/mistral": {"tools": False},
-    "ollama/codellama": {"tools": False},
-}
+# Ollama models are added dynamically; all default to tools=False.
+MODEL_CAPABILITIES: dict[str, dict] = {}
 
 
 def provider_for_model(model_id: str) -> str:
@@ -41,6 +34,8 @@ def provider_for_model(model_id: str) -> str:
 
 
 def model_supports_tools(model_id: str) -> bool:
+    if model_id.startswith("ollama/"):
+        return MODEL_CAPABILITIES.get(model_id, {}).get("tools", False)
     return MODEL_CAPABILITIES.get(model_id, {}).get("tools", True)
 
 

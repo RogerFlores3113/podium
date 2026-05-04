@@ -155,7 +155,9 @@ def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str
     if user.is_guest:
         return settings.openai_api_key
     if provider == "ollama":
-        return ""
+        # For Ollama, the "key" stored in BYOK is the user's base URL.
+        # Fall back to the server-wide OLLAMA_BASE_URL if no user URL is saved.
+        return user_key or settings.ollama_base_url or ""
     if not user_key:
         provider_label = {
             "anthropic": "Anthropic API key",

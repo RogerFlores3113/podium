@@ -206,7 +206,7 @@ export default function SettingsPage() {
         <form onSubmit={handleAddKey} className="flex gap-2 mb-4">
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => { setProvider(e.target.value); setApiKey(""); }}
             className="rounded-lg px-3 py-2 text-sm"
             style={{
               background: "var(--bg-surface)",
@@ -219,10 +219,10 @@ export default function SettingsPage() {
             <option value="ollama">Ollama</option>
           </select>
           <input
-            type="password"
+            type={provider === "ollama" ? "text" : "password"}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-..."
+            placeholder={provider === "ollama" ? "http://host.docker.internal:11434" : "sk-..."}
             className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
             style={{
               background: "var(--bg-surface)",
@@ -235,9 +235,15 @@ export default function SettingsPage() {
             className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
             style={{ background: "var(--accent-warm)", color: "#fff" }}
           >
-            Save Key
+            {provider === "ollama" ? "Save URL" : "Save Key"}
           </button>
         </form>
+
+        {provider === "ollama" && (
+          <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+            The backend runs in Docker — use <code>host.docker.internal</code> instead of <code>localhost</code>. Models are detected automatically from your Ollama server.
+          </p>
+        )}
 
         {keyStatus && (
           <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>

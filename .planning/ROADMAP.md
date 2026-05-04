@@ -96,7 +96,7 @@ Plans:
 Plans:
 **Wave 1**
 - [x] 06-01-PLAN.md — Wave 0 RED: write 7 failing tests for AUDIT-01 gaps + CR-02 + CR-04
-- [ ] 06-02-PLAN.md — Wave 1 GREEN backend: fix CR-01, CR-02, CR-04
+- [x] 06-02-PLAN.md — Wave 1 GREEN backend: fix CR-01, CR-02, CR-04
 - [ ] 06-03-PLAN.md — Wave 1 GREEN frontend: fix CR-03 (SSE JSON.parse guard)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -148,7 +148,7 @@ Plans:
 | 3. Destructive UX Paths | 3/3 | Complete | 2026-05-03 |
 | 4. Loading & Error UX | 3/3 | Complete | 2026-05-03 |
 | 5. Model Roster & Ollama | 3/3 | Complete | 2026-05-03 |
-| 6. PR #14 Audit & Smoke Test | 0/0 | Not started | — |
+| 6. PR #14 Audit & Smoke Test | 2/4 | In progress | — |
 
 ---
 *Roadmap defined: 2026-05-03*

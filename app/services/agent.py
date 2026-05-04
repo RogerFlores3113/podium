@@ -158,11 +158,15 @@ async def _run_responses_agent(
                 elif item_type == "reasoning":
                     enc = getattr(item, "encrypted_content", None)
                     if enc:
-                        reasoning_items.append({
+                        reasoning_item: dict = {
                             "type": "reasoning",
                             "id": item.id,
                             "encrypted_content": enc,
-                        })
+                        }
+                        summary = getattr(item, "summary", None)
+                        if summary is not None:
+                            reasoning_item["summary"] = summary
+                        reasoning_items.append(reasoning_item)
 
         # Emit the full assistant message for DB persistence
         tool_calls_list = (
@@ -326,16 +330,13 @@ async def run_agent(
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")
 
         try:
+            is_ollama = resolved_model.startswith("ollama/")
             response = await acompletion(
                 model=resolved_model,
                 messages=messages,
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
-                api_key=resolved_api_key,
-                api_base=(
-                    settings.ollama_base_url
-                    if resolved_model.startswith("ollama/")
-                    else None
-                ),
+                api_key="" if is_ollama else resolved_api_key,
+                api_base=resolved_api_key if is_ollama else None,
                 max_tokens=1500,
                 stream=True,
             )

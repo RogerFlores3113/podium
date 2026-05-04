@@ -3,6 +3,7 @@ import json
 import logging
 from sse_starlette.sse import EventSourceResponse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +27,36 @@ logger = logging.getLogger(__name__)
 
 @router.get("/models")
 async def list_models():
-    """Return models available for selection, filtered by enabled providers."""
-    if not settings.ollama_base_url:
-        return [m for m in AVAILABLE_MODELS if m["provider"] != "ollama"]
+    """Return non-Ollama models available for selection. Ollama models are fetched separately."""
     return AVAILABLE_MODELS
+
+
+@router.get("/ollama-models")
+async def list_ollama_models(
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return models available on the user's configured Ollama server."""
+    user_ollama_url = await get_user_api_key(db, user.clerk_id, "ollama")
+    base_url = user_ollama_url or settings.ollama_base_url
+    if not base_url:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url.rstrip('/')}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return []
+    models = [
+        {
+            "id": f"ollama/{m['name']}",
+            "label": f"{m['name']} (local)",
+            "provider": "ollama",
+        }
+        for m in data.get("models", [])
+    ]
+    return models
 
 
 @router.get("/", response_model=list[ConversationListItemResponse])

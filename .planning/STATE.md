@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-04T07:00:00.000Z"
+last_updated: "2026-05-04T08:00:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 19
-  completed_plans: 16
-  percent: 84
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -35,7 +35,7 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 06 (PR #14 Audit & Smoke Test) — EXECUTING
-Plan: 2 of 4 (06-01 complete; RED baseline locked)
+Plan: 3 of 4 (06-01 RED baseline + 06-02 GREEN code-review fixes complete)
 
 - **Phase:** 6 — PR #14 Audit & Smoke Test (next)
 - **Last completed:** Phase 5 — Model Roster & Ollama (2026-05-03)
@@ -56,9 +56,8 @@ Plan: 2 of 4 (06-01 complete; RED baseline locked)
 ### Open Items
 
 - SSE proxy buffering confirmed not an issue (Vercel proxy passes body stream through directly).
-- CR-01 (Phase 2 review): QUAL-03 rollback assertion in test_agent_reliability.py is a tuple expression (always truthy) — real test gap, fix in Phase 6 audit.
-- CR-02 (Phase 2 review): BadRequestError handler echoes LLM query into return string — low risk (shared infra, no user keys), fix in Phase 6 audit.
 - Phase 5 UAT pending (live-environment): Ollama BYOK bypass e2e, guest model picker disabled UI, stale localStorage model clear (see 05-HUMAN-UAT.md).
+- CR-01/CR-02/CR-04 — closed in Plan 06-02 (commits f93e2f3, e3b997d, 5af36b5).
 
 ### Blockers
 
@@ -77,8 +76,9 @@ Plan: 2 of 4 (06-01 complete; RED baseline locked)
   - Ollama opt-in via OLLAMA_BASE_URL; BYOK bypassed for Ollama provider.
   - model validation moved before DB work (fail fast); test auth mock fixed.
   - Work on `stabilization-hardening` branch.
-- Next action: `/gsd-discuss-phase 6` or `/gsd-plan-phase 6`
+- Plan 06-02 complete 2026-05-04: 3 code-review fixes (CR-01, CR-02, CR-04). All 7 RED tests from Plan 06-01 now GREEN. Full suite 71/71.
+- Next action: continue Phase 6 — Plan 06-03
 
 ## Last Updated
 
-2026-05-04 — Plan 06-01 complete (RED baseline: 7 new tests, 5 green / 2 expected RED for Plan 02)
+2026-05-04 — Plan 06-02 complete (CR-01/02/04 fixed; 71/71 tests passing)

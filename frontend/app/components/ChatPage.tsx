@@ -102,19 +102,26 @@ export default function ChatPage() {
     } catch {
       // sessionStorage unavailable
     }
-    // Fetch available models from backend
+    // Fetch available models from backend (base list + dynamic Ollama models)
     void (async () => { try {
       const res = await fetch(`${API_URL}/chat/models`);
-      if (res.ok) {
-        const models = await res.json();
-        setAvailableModels(models);
-        const stored = localStorage.getItem("selectedModel");
-        if (stored && models.some((m: { id: string }) => m.id === stored)) {
-          setSelectedModel(stored);
-        } else if (stored) {
-          setSelectedModel(DEFAULT_MODEL);
-          try { localStorage.removeItem("selectedModel"); } catch {}
+      if (!res.ok) return;
+      const baseModels = await res.json();
+      let allModels = baseModels;
+      try {
+        const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+        if (ollamaRes.ok) {
+          const ollamaModels = await ollamaRes.json();
+          if (ollamaModels.length > 0) allModels = [...baseModels, ...ollamaModels];
         }
+      } catch {}
+      setAvailableModels(allModels);
+      const stored = localStorage.getItem("selectedModel");
+      if (stored && allModels.some((m: { id: string }) => m.id === stored)) {
+        setSelectedModel(stored);
+      } else if (stored) {
+        setSelectedModel(DEFAULT_MODEL);
+        try { localStorage.removeItem("selectedModel"); } catch {}
       }
     } catch {} })();
     // Open sidebar by default on wider screens
@@ -788,7 +795,12 @@ export default function ChatPage() {
           <form onSubmit={handleSubmit} className="flex gap-2">
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+              }}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -807,7 +819,8 @@ export default function ChatPage() {
                 border: "1px solid var(--border)",
                 color: "var(--text-primary)",
                 minHeight: "40px",
-                maxHeight: "200px",
+                maxHeight: "144px",
+                overflowY: "auto",
               }}
               disabled={isLoading}
             />
