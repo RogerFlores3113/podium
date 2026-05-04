@@ -10,10 +10,11 @@ logger = logging.getLogger(__name__)
 class MemorySearchTool(Tool):
     name = "memory_search"
     description = (
-        "Search the user's memories for relevant past context. Use this when "
-        "the user references something they told you before, asks you to "
-        "remember something, or when context from past conversations might "
-        "be relevant. Returns memories ordered by relevance."
+        "Search what the user has shared in past conversations — recruiter preferences, "
+        "candidate notes, company context, and ongoing hiring context. Use this when "
+        "the user references something they told you before, asks you to recall a preference, "
+        "or when past context from previous sessions would improve your answer. "
+        "Returns memories ordered by relevance."
     )
     parameters = {
         "type": "object",

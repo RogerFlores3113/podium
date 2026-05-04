@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 class WebSearchTool(Tool):
     name = "web_search"
     description = (
-        "Search the web for current information. Use this when the user asks "
-        "about recent events, current facts, or anything that might have "
-        "changed since your training data. Returns a list of relevant results "
-        "with titles, URLs, and summaries."
+        "Search the web for current information relevant to recruiting — company profiles, "
+        "salary benchmarks, job market trends, hiring news, and candidate background research. "
+        "Use this when the user asks about a company, current compensation data, industry "
+        "hiring trends, or anything that may have changed since your training data. "
+        "Returns a list of results with titles, URLs, and summaries."
     )
     parameters = {
         "type": "object",
