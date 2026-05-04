@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Polish, Reliability & AI Upgrade
-status: planning
-last_updated: "2026-05-04T00:00:00.000Z"
+status: executing
+last_updated: "2026-05-04T11:00:00.000Z"
+last_activity: 2026-05-04 -- Phase 7 Plan 1 complete (OLL-02 + DEBT-01/02 verified)
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -19,23 +20,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** A recruiter can ask a question and get a fast, reliable, clearly-presented answer with no silent failures.
-**Current focus:** v2.0 Polish, Reliability & AI Upgrade — clearing code debt, fixing UI bugs, upgrading agent with actor-critic + memory.
+**Current focus:** Phase 7 — Backend Debt & Security
 
 ## Phase Status
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Backend Debt & Security | 0/TBD | Not started | - |
+| 7. Backend Debt & Security | 1/1 | Complete | 2026-05-04 |
 | 8. Frontend Bugs & Polish | 0/TBD | Not started | - |
 | 9. Memory & Agent Core | 0/TBD | Not started | - |
 | 10. Agent UI & Dynamic Ollama | 0/TBD | Not started | - |
 
 ## Current Position
 
-Phase: Not started (roadmap defined, planning next)
-Plan: —
-Status: Ready to begin Phase 7
-Last activity: 2026-05-04 — v2.0 roadmap created, 18/18 requirements mapped
+Phase: 7 (Backend Debt & Security) — COMPLETE
+Plan: 1 of 1 (done)
+Status: Ready for Phase 8
+Last activity: 2026-05-04 -- Phase 7 Plan 1 complete (OLL-02 + DEBT-01/02 verified)
 
 ## Accumulated Context
 
@@ -79,4 +80,4 @@ Last activity: 2026-05-04 — v2.0 roadmap created, 18/18 requirements mapped
 
 ## Last Updated
 
-2026-05-04 — v2.0 roadmap created. Phases 7-10 defined. 18/18 requirements mapped. Ready to begin Phase 7.
+2026-05-04 — Phase 7 Plan 1 complete. OLL-02 (normalize_ollama_url) implemented and wired at agent.py:340 + chat.py:41. DEBT-01 and DEBT-02 verified still in place via grep + 11 passing byok-and-guest-guards tests + git log provenance (commits c0d49a6, 298892c). Full suite: 76 passed. 4 commits: a4d68d0 → cb39955 → bcd2739 → 1b9c32b.
