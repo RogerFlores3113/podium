@@ -557,3 +557,284 @@ describe("ChatPage SSE error event", () => {
     expect(screen.getByText(/Based on the search resul/)).toBeTruthy();
   });
 });
+
+describe("ChatPage HTTP error responses", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("renders BYOK error bubble on HTTP 402", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ detail: { code: "byok_required" } }),
+        { status: 402, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("hi");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    const bubble = await screen.findByTestId("error-bubble");
+    expect(bubble.textContent || "").toMatch(/key/i);
+  });
+
+  it("renders guest-limit error bubble on HTTP 429 using backend message when present", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "guest_limit_reached",
+            message: "You hit the cap of 5 messages.",
+          },
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("hi");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    const bubble = await screen.findByTestId("error-bubble");
+    expect(bubble.textContent || "").toMatch(/cap of 5 messages/);
+  });
+
+  it("renders generic server error bubble on HTTP 500", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    // Note: NOT JSON — exercises the path where backend returns plain text.
+    fetchSpy.mockResolvedValueOnce(
+      new Response("Internal Server Error", { status: 500 }),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("hi");
+    const form = composer.closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    const bubble = await screen.findByTestId("error-bubble");
+    expect(bubble.textContent || "").toMatch(/something went wrong|server/i);
+  });
+});
+
+describe("ChatPage multi-line composer", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("Enter submits the message", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    fetchSpy.mockResolvedValueOnce(
+      makeSSEResponse([
+        { event: "conversation", data: { conversation_id: "c1" } },
+        { event: "token", data: { token: "ok" } },
+        { event: "done", data: { conversation_id: "c1" } },
+      ]),
+    );
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    await user.click(composer);
+    await user.keyboard("Hello");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+        String(url).includes("/chat/stream"),
+      );
+      expect(submitCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("Shift+Enter inserts newline and does NOT submit", async () => {
+    const user = userEvent.setup();
+    mockConversationList(fetchSpy, []);
+
+    render(<ChatPage />);
+
+    const composer = (await screen.findByPlaceholderText(
+      /Ask me anything/i,
+    )) as HTMLTextAreaElement;
+    await user.click(composer);
+    await user.keyboard("Line 1");
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    await user.keyboard("Line 2");
+
+    // Today: composer is <input type="text"> — \n is silently dropped.
+    // Wave 2: composer is <textarea> — value preserves the newline.
+    expect(composer.value).toBe("Line 1\nLine 2");
+
+    const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+      String(url).includes("/chat/stream"),
+    );
+    expect(submitCalls.length).toBe(0);
+  });
+
+  it("Enter during IME composition does NOT submit", async () => {
+    mockConversationList(fetchSpy, []);
+
+    render(<ChatPage />);
+
+    const composer = await screen.findByPlaceholderText(/Ask me anything/i);
+    // fireEvent.keyDown lets us pass isComposing on the synthetic event;
+    // userEvent does not expose this flag.
+    fireEvent.keyDown(composer, {
+      key: "Enter",
+      code: "Enter",
+      isComposing: true,
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    const submitCalls = fetchSpy.mock.calls.filter(([url]) =>
+      String(url).includes("/chat/stream"),
+    );
+    expect(submitCalls.length).toBe(0);
+    // Today: <input type="text"> has no onKeyDown for Enter and no submit
+    // wiring through keyDown either, so this passes vacuously. Wave 2 ships
+    // the textarea + IME guard; this test prevents regression.
+    // To make it RED today, we additionally require the composer be a textarea.
+    expect(composer.tagName.toLowerCase()).toBe("textarea");
+  });
+});
+
+describe("ChatPage upload poll cap", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("stops polling after MAX_POLL_ATTEMPTS", async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockConversationList(fetchSpy, []);
+
+    // Upload POST → 200
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id: "d1", filename: "a.pdf" }),
+        { status: 200 },
+      ),
+    );
+    // Every poll returns processing
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "d1",
+          filename: "a.pdf",
+          status: "processing",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(<ChatPage />);
+
+    // Wait for mount
+    await screen.findByPlaceholderText(/Ask me anything/i);
+
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    expect(fileInput).toBeTruthy();
+
+    await user.upload(
+      fileInput,
+      new File(["dummy"], "a.pdf", { type: "application/pdf" }),
+    );
+
+    // > 60 attempts at 1s each
+    await vi.advanceTimersByTimeAsync(70_000);
+    const callsAfterCap = fetchSpy.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterCap);
+  });
+
+  it("stops polling and surfaces a status when fetch rejects", async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockConversationList(fetchSpy, []);
+
+    // Upload POST → 200
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id: "d1", filename: "a.pdf" }),
+        { status: 200 },
+      ),
+    );
+    // First poll tick rejects
+    fetchSpy.mockRejectedValueOnce(new Error("Network down"));
+
+    render(<ChatPage />);
+
+    await screen.findByPlaceholderText(/Ask me anything/i);
+
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    await user.upload(
+      fileInput,
+      new File(["dummy"], "a.pdf", { type: "application/pdf" }),
+    );
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // Today: rejection bubbles up inside the interval callback unhandled —
+    // no user-readable status is set. Wave 2 wraps the callback in try/catch
+    // and surfaces a failure status.
+    expect(
+      screen.queryByText(/upload.*(failed|error)/i),
+    ).toBeTruthy();
+
+    const callsAfter = fetchSpy.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchSpy.mock.calls.length).toBe(callsAfter);
+  });
+});
