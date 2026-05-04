@@ -356,3 +356,24 @@ def test_history_excludes_current_message():
         "build_conversation_history must be called BEFORE user_message = Message(...) "
         "to prevent the current message from appearing twice in LLM context (QUAL-04)"
     )
+
+
+# ---------------------------------------------------------------------------
+# MEM-02: System prompt memory guidance
+# ---------------------------------------------------------------------------
+
+def test_system_prompt_contains_memory_save_guidance():
+    """AGENT_SYSTEM_PROMPT must instruct the agent to use memory_save (MEM-02, D-09-02)."""
+    from app.services.agent import AGENT_SYSTEM_PROMPT
+    assert "memory_save" in AGENT_SYSTEM_PROMPT, (
+        "AGENT_SYSTEM_PROMPT must include memory_save in the tool list and guidelines"
+    )
+
+
+def test_system_prompt_tells_agent_not_to_save_temporary_context():
+    """AGENT_SYSTEM_PROMPT must instruct the agent NOT to save temporary task context (MEM-02, D-09-02)."""
+    from app.services.agent import AGENT_SYSTEM_PROMPT
+    prompt_lower = AGENT_SYSTEM_PROMPT.lower()
+    assert "temporary" in prompt_lower or "do not save" in prompt_lower or "don't save" in prompt_lower, (
+        "AGENT_SYSTEM_PROMPT must include guidance to avoid saving temporary task context"
+    )

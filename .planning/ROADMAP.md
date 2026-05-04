@@ -132,7 +132,7 @@ Coverage (v1.0):
 ### Phase Checklist
 
 - [x] **Phase 7: Backend Debt & Security** — Eliminate the guest API key leak, harden SSE stream teardown, and fix the Ollama localhost URL rewrite.
-- [ ] **Phase 8: Frontend Bugs & Polish** — Fix all four UI bugs, surface the BYOK 402 provider-correct message, and ship markdown rendering with in-progress indicators.
+- [x] **Phase 8: Frontend Bugs & Polish** — Fix all four UI bugs, surface the BYOK 402 provider-correct message, and ship markdown rendering with in-progress indicators. (completed 2026-05-04)
 - [ ] **Phase 9: Memory & Agent Core** — Add `memory_save` tool, update system prompt with memory guidance, audit all agent prompts, and implement the actor-critic self-critique pass.
 - [ ] **Phase 10: Agent UI & Dynamic Ollama** — Expose the Effort slider in the UI and wire up the dynamic Ollama model list in the picker.
 
@@ -166,9 +166,11 @@ Plans:
   8. Assistant messages render as markdown; links are blue and underline on hover.
 **Plans:** 2 plans
 
+**Plans:** 2/2 plans complete
+
 Plans:
-- [ ] 08-01-PLAN.md — All ChatPage.tsx fixes: UI-01/02/03/04, DEBT-03, UX-01/02 + test suite (Wave 1)
-- [ ] 08-02-PLAN.md — globals.css markdown link/code styling: UX-03 (Wave 1, parallel)
+- [x] 08-01-PLAN.md — All ChatPage.tsx fixes: UI-01/02/03/04, DEBT-03, UX-01/02 + test suite (Wave 1)
+- [x] 08-02-PLAN.md — globals.css markdown link/code styling: UX-03 (Wave 1, parallel)
 
 ### Phase 9: Memory & Agent Core
 **Goal:** The agent can proactively save memories during conversation, and its reasoning quality is improved through prompt auditing and a self-critique pass.
@@ -179,7 +181,13 @@ Plans:
   2. The system prompt instructs the agent on when to proactively save memories vs. search — representative recruiter queries result in appropriate memory saves without explicit user instruction.
   3. All tool descriptions and the system prompt have been reviewed and rewritten — representative recruiter queries produce more complete and accurate answers than before the audit.
   4. When effort level is Balanced or Thorough, the agent performs a self-critique pass before delivering its final answer; when effort is Fast, the self-critique pass is skipped.
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Write all RED failing tests for Phase 9 (Wave 0, TDD baseline)
+- [ ] 09-02-PLAN.md — memory_save tool, system prompt rewrite, tool descriptions (Wave 1, MEM-01/02/AGT-01)
+- [ ] 09-03-PLAN.md — effort field, _actor_critic helper, both execution path intercepts (Wave 1 parallel, AGT-02/04)
+- [ ] 09-04-PLAN.md — GREEN verification gate, full suite must pass (Wave 2)
 
 ### Phase 10: Agent UI & Dynamic Ollama
 **Goal:** Users can select their desired reasoning depth per query, and the Ollama model picker shows a live list of locally-available models after the base URL is saved.
@@ -227,10 +235,10 @@ Plans:
 | 5. Model Roster & Ollama | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 6. PR #14 Audit & Smoke Test | v1.0 | 4/4 | Complete | 2026-05-04 |
 | 7. Backend Debt & Security | v2.0 | 1/1 | Complete    | 2026-05-04 |
-| 8. Frontend Bugs & Polish | v2.0 | 0/2 | Not started | - |
+| 8. Frontend Bugs & Polish | v2.0 | 2/2 | Complete    | 2026-05-04 |
 | 9. Memory & Agent Core | v2.0 | 0/TBD | Not started | - |
 | 10. Agent UI & Dynamic Ollama | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap defined: 2026-05-03 (v1.0) / 2026-05-04 (v2.0 phases added)*
-*Last updated: 2026-05-04 — Phase 8 planned (2 plans, 1 wave).*
+*Last updated: 2026-05-04 — Phase 8 complete. 57/57 tests passing. 8 requirements verified.*
