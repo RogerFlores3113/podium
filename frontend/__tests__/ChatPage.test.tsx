@@ -86,7 +86,14 @@ describe("ChatPage sidebar delete", () => {
     expect(screen.getByTitle("Delete conversation")).toBeTruthy();
 
     await user.unhover(row);
-    expect(document.querySelector('[title="Delete conversation"]')).toBeNull();
+    // ChatPage.tsx debounces hover-hide via setTimeout(0) on mouseleave so that
+    // mouseenter on the child × button can cancel the hide (prevents flicker when
+    // jsdom/userEvent fires mouseleave on the parent row when the pointer enters
+    // the child button). We must wait for that deferred state update + re-render
+    // before asserting the button is gone — a synchronous assertion races the timer.
+    await waitFor(() =>
+      expect(screen.queryByTitle("Delete conversation")).toBeNull()
+    );
   });
 
   it("clicking × shows confirm; cancel is a no-op", async () => {
