@@ -168,10 +168,11 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Clean up upload poll on unmount
+  // Clean up upload poll and hover timeout on unmount
   useEffect(() => {
     return () => {
       if (uploadPollRef.current) clearInterval(uploadPollRef.current);
+      if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
     };
   }, []);
 
