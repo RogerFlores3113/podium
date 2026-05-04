@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, model_supports_tools
+from app.services.llm import normalize_ollama_url
 from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
 
@@ -336,7 +337,7 @@ async def run_agent(
                 messages=messages,
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
                 api_key="" if is_ollama else resolved_api_key,
-                api_base=resolved_api_key if is_ollama else None,
+                api_base=normalize_ollama_url(resolved_api_key) if is_ollama else None,
                 max_tokens=1500,
                 stream=True,
             )

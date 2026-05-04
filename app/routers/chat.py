@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import Conversation, Message, User
 from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
-from app.services.llm import build_conversation_history, get_user_api_key, resolve_api_key
+from app.services.llm import build_conversation_history, get_user_api_key, normalize_ollama_url, resolve_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
 
@@ -38,7 +38,7 @@ async def list_ollama_models(
 ):
     """Return models available on the user's configured Ollama server."""
     user_ollama_url = await get_user_api_key(db, user.clerk_id, "ollama")
-    base_url = user_ollama_url or settings.ollama_base_url
+    base_url = normalize_ollama_url(user_ollama_url or settings.ollama_base_url)
     if not base_url:
         return []
     try:
