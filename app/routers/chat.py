@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 @router.get("/models")
 async def list_models():
-    """Return the list of models available for selection."""
+    """Return models available for selection, filtered by enabled providers."""
+    if not settings.ollama_base_url:
+        return [m for m in AVAILABLE_MODELS if m["provider"] != "ollama"]
     return AVAILABLE_MODELS
 
 
@@ -139,6 +141,12 @@ async def chat_stream(
         history = await build_conversation_history(
             db, conversation.id, settings.memory_max_tokens
         )
+
+    # Validate model against active roster (MODEL-03 security: reject disabled Ollama models)
+    if body.model:
+        active_model_ids = {m["id"] for m in await list_models()}
+        if body.model not in active_model_ids:
+            raise HTTPException(status_code=422, detail="Model not available")
 
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
