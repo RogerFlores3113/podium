@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from litellm import acompletion
-from sqlalchemy import select
+from sqlalchemy import select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -163,7 +163,6 @@ async def persist_memories(
 
     count = 0
     for mem_data, embedding in zip(memories, embeddings):
-        from sqlalchemy import text as sa_text
         dup_result = await db.execute(
             sa_text("""
                 SELECT 1 - (embedding <=> :embedding) AS similarity
@@ -233,15 +232,13 @@ async def search_memories(
     top_k: int | None = None,
 ) -> list[dict]:
     """Semantic search over a user's memories. Used by the memory_search tool."""
-    from sqlalchemy import text
-
     top_k = top_k or settings.memory_retrieval_top_k
 
     embeddings = await generate_embeddings([query])
     query_embedding = embeddings[0]
 
     result = await db.execute(
-        text("""
+        sa_text("""
             SELECT id, category, content, 1 - (embedding <=> :embedding) AS similarity
             FROM memories
             WHERE user_id = :user_id

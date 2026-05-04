@@ -219,6 +219,7 @@ async def test_responses_api_empty_completion_retries():
             conversation_history=[],
             api_key="sk-test",
             model="gpt-5-nano",  # Responses API model
+            effort="fast",  # skip actor-critic to avoid unpatched acompletion call
         ):
             events.append(event)
 
@@ -497,7 +498,8 @@ async def test_responses_api_effort_balanced_maps_to_medium():
     mock_response = MagicMock()
     mock_response.__aiter__ = lambda self: _text_stream()
 
-    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls:
+    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls, \
+         patch("app.services.agent._actor_critic", new=AsyncMock(side_effect=lambda t, m, mdl: t)):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.responses.create = AsyncMock(return_value=mock_response)
@@ -538,7 +540,8 @@ async def test_responses_api_effort_thorough_maps_to_high():
     mock_response = MagicMock()
     mock_response.__aiter__ = lambda self: _text_stream()
 
-    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls:
+    with patch("app.services.agent.AsyncOpenAI") as mock_openai_cls, \
+         patch("app.services.agent._actor_critic", new=AsyncMock(side_effect=lambda t, m, mdl: t)):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.responses.create = AsyncMock(return_value=mock_response)

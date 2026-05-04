@@ -205,8 +205,14 @@ async def _run_responses_agent(
                 # Final answer — apply actor-critic self-critique pass if applicable (AGT-02, Pitfall 1)
                 final_text = accumulated_text
                 if effort != "fast" and not is_guest:
+                    # Convert Responses API input_messages to standard format for _actor_critic
+                    standard_messages = [
+                        {"role": m["role"], "content": m["content"][0]["text"]}
+                        for m in input_messages
+                        if isinstance(m.get("content"), list) and m.get("role") in ("user", "assistant")
+                    ]
                     final_text = await _actor_critic(
-                        final_text, [], model
+                        final_text, standard_messages, model
                     )
                 yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
