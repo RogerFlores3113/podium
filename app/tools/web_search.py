@@ -68,7 +68,7 @@ class WebSearchTool(Tool):
             return "Web search timed out — please try again."
         except BadRequestError:
             logger.warning("Tavily bad request for query %r", query, exc_info=True)
-            return f"Web search failed for query: {query!r}. Please try rephrasing."
+            return "Web search could not process that query. Please try rephrasing."
         except Exception:
             logger.error("Unexpected web search error", exc_info=True)
             return "Web search is temporarily unavailable."
