@@ -56,6 +56,8 @@ export default function ChatPage() {
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
+  const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
+  const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -104,7 +106,9 @@ export default function ChatPage() {
       const res = await authFetch(`${API_URL}/chat/`);
       if (!res.ok) return;
       const data = await res.json();
-      setConversations(data);
+      if (Array.isArray(data)) {
+        setConversations(data);
+      }
     } catch {
       // sidebar is non-critical
     }
@@ -137,6 +141,14 @@ export default function ChatPage() {
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setConversationId(null);
     hasWelcomed.current = true;
+  };
+
+  const handleDeleteConversation = async (id: string) => {
+    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+    const res = await authFetch(`${API_URL}/chat/${id}`, { method: "DELETE" });
+    if (!res.ok) return; // sidebar silent per D-05
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (conversationId === id) startNewConversation();
   };
 
   const loadConversation = async (id: string) => {
@@ -396,10 +408,32 @@ export default function ChatPage() {
             </p>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => loadConversation(conv.id)}
-                className="w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    loadConversation(conv.id);
+                  }
+                }}
+                onMouseEnter={() => {
+                  if (hoverHideTimeoutRef.current) {
+                    clearTimeout(hoverHideTimeoutRef.current);
+                    hoverHideTimeoutRef.current = null;
+                  }
+                  setHoveredConvId(conv.id);
+                }}
+                onMouseLeave={() => {
+                  // Defer hide so mouseenter on the × button child can cancel it
+                  hoverHideTimeoutRef.current = setTimeout(
+                    () => setHoveredConvId(null),
+                    0
+                  );
+                }}
+                className="relative w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80 cursor-pointer"
                 style={{
                   background: conv.id === conversationId ? "var(--bg-surface)" : "transparent",
                   border: conv.id === conversationId ? "1px solid var(--border)" : "1px solid transparent",
@@ -414,7 +448,34 @@ export default function ChatPage() {
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                   {formatRelativeTime(conv.created_at)}
                 </div>
-              </button>
+                {hoveredConvId === conv.id && (
+                  <button
+                    type="button"
+                    title="Delete conversation"
+                    onMouseEnter={() => {
+                      if (hoverHideTimeoutRef.current) {
+                        clearTimeout(hoverHideTimeoutRef.current);
+                        hoverHideTimeoutRef.current = null;
+                      }
+                      setHoveredConvId(conv.id);
+                    }}
+                    onMouseLeave={() => {
+                      hoverHideTimeoutRef.current = setTimeout(
+                        () => setHoveredConvId(null),
+                        0
+                      );
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteConversation(conv.id);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-sm transition-opacity hover:opacity-70"
+                    style={{ color: "#b91c1c" }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>
