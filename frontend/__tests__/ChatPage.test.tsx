@@ -921,12 +921,12 @@ describe("guest banner reactive cleanup", () => {
       new Response(JSON.stringify([]), { status: 200 }),
     );
     const { rerender } = render(<ChatPage />);
-    await waitFor(() => expect(screen.queryByText(/Guest session/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Guest session/)).toBeTruthy());
 
     // Simulate Clerk confirming sign-in
     mockIsSignedIn = true;
     rerender(<ChatPage />);
-    await waitFor(() => expect(screen.queryByText(/Guest session/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Guest session/)).toBeNull());
   });
 });
 
@@ -948,7 +948,7 @@ describe("capability cards", () => {
     mockMountFetches(fetchSpy);
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    expect(screen.queryByText("Generate images")).not.toBeInTheDocument();
+    expect(screen.queryByText("Generate images")).toBeNull();
   });
 });
 
@@ -983,7 +983,7 @@ describe("ChatPage BYOK provider-correct copy", () => {
     await user.type(screen.getByRole("textbox"), "hello");
     await user.keyboard("{Enter}");
     await waitFor(() =>
-      expect(screen.getByText(/Anthropic API key/)).toBeInTheDocument()
+      expect(screen.queryAllByText(/Anthropic API key/).length).toBeGreaterThan(0)
     );
   });
 });
@@ -1004,16 +1004,17 @@ describe("synthesis gap indicator", () => {
 
   it("shows thinking indicator after tool_call_result SSE event", async () => {
     mockMountFetches(fetchSpy, []);
-    const sseBody = [
-      'event: conversation\ndata: {"conversation_id":"c-new"}\n\n',
-      'event: tool_call_start\ndata: {"id":"tc1","name":"web_search","arguments":"{}"}\n\n',
-      'event: tool_call_result\ndata: {"id":"tc1","result":"done"}\n\n',
-    ].join("");
+    // Stream stays open after tool_call_result so thinking indicator is observable
+    // (if stream closes, setIsThinking(false) fires immediately at end of submitMessage)
     fetchSpy.mockResolvedValueOnce(
-      new Response(sseBody, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      }),
+      streamingResponse(
+        [
+          { event: "conversation", data: { conversation_id: "c-new" } },
+          { event: "tool_call_start", data: { id: "tc1", name: "web_search", arguments: {} } },
+          { event: "tool_call_result", data: { id: "tc1", result: "done" } },
+        ],
+        { close: false },
+      ),
     );
     render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
@@ -1021,7 +1022,7 @@ describe("synthesis gap indicator", () => {
     await user.type(screen.getByRole("textbox"), "search this");
     await user.keyboard("{Enter}");
     await waitFor(() =>
-      expect(screen.getByTestId("thinking-indicator")).toBeInTheDocument()
+      expect(screen.queryByTestId("thinking-indicator")).toBeTruthy()
     );
   });
 });

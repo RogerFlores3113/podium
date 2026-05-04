@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
@@ -20,12 +20,12 @@ const CAPABILITY_CARDS = [
   { icon: "📄", label: "Upload documents", prompt: "I'll upload a PDF — summarize it for me" },
   { icon: "🐍", label: "Run code", prompt: "Write and run a Python script that prints the Fibonacci sequence" },
   { icon: "🧠", label: "I'll remember this", prompt: "Remember that I prefer concise answers" },
-  { icon: "🎨", label: "Generate images", prompt: "Generate an image of a mountain at sunset" },
 ];
 
 const WELCOME_MESSAGE =
   "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
 
+// UX-02 audit passed: all entries ≤3 words (excluding trailing ellipsis)
 const TOOL_PHASE_COPY: Record<string, string> = {
   web_search: "Searching the web…",
   document_search: "Reading uploaded documents…",
@@ -39,7 +39,7 @@ const toolPhaseCopy = (name: string): string =>
 type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
 
 const ERROR_COPY: Record<ErrorKind, string> = {
-  byok: "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+  byok: "Add your API key in Settings to chat. Or sign out and try Podium as a guest.",
   limit: "You've reached the guest message limit. Sign up to keep chatting.",
   server: "Something went wrong on our end. Please try again in a moment.",
   stream: "", // SSE error fills from data.detail
@@ -74,11 +74,14 @@ export default function ChatPage() {
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
+  const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { isSignedIn } = useAuth();
 
   useEffect(() => {
     try {
@@ -164,6 +167,19 @@ export default function ChatPage() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Reactive guest cleanup: when Clerk confirms sign-in, clear guest state and
+  // reload conversation list so sidebar populates without a page refresh.
+  useEffect(() => {
+    if (isSignedIn) {
+      setIsGuest(false);
+      try {
+        sessionStorage.removeItem("podium_guest_token");
+        sessionStorage.removeItem("podium_guest_expires");
+      } catch { /* sessionStorage unavailable */ }
+      fetchConversations();
+    }
+  }, [isSignedIn, fetchConversations]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -241,6 +257,7 @@ export default function ChatPage() {
         const body = await response.json();
         if (body?.detail?.message) copy = body.detail.message;
       } catch { /* use generic copy */ }
+      setByokCopy(copy);
       setMessages((prev) => [...prev, { role: "error", kind: "byok", content: copy }]);
       setIsThinking(false);
       setIsLoading(false);
@@ -350,6 +367,7 @@ export default function ChatPage() {
                     }
                     return updated;
                   });
+                  setIsThinking(true);
                   setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                 } else if (currentEvent === "tool_call_error") {
                   setMessages((prev) => {
@@ -595,8 +613,8 @@ export default function ChatPage() {
                       e.stopPropagation();
                       handleDeleteConversation(conv.id);
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-sm transition-opacity hover:opacity-70"
-                    style={{ color: "#b91c1c" }}
+                    className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center text-sm rounded-full transition-opacity hover:opacity-80"
+                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
                   >
                     ×
                   </button>
@@ -617,7 +635,7 @@ export default function ChatPage() {
         )}
         {byokError && (
           <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #fff8e1)", color: "var(--text-secondary, #555)" }}>
-            Add your OpenAI API key to start chatting.{" "}
+            {byokCopy}{" "}
             <a href="/settings" className="underline font-medium">Settings →</a>
           </div>
         )}
@@ -630,7 +648,7 @@ export default function ChatPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="w-7 h-7 flex items-center justify-center rounded text-sm transition-opacity hover:opacity-70"
+                className="md:hidden w-7 h-7 flex items-center justify-center rounded text-sm transition-opacity hover:opacity-70"
                 style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
                 title="Toggle sidebar"
               >
