@@ -1,4 +1,16 @@
-# Podium — Stabilization & Hardening Milestone
+# Podium — Polish, Reliability & AI Upgrade
+
+## Current Milestone: v2.0 Polish & Reliability
+
+**Goal:** Clear v1.0 code review debt, ship UX improvements, and upgrade the agent with actor-critic reasoning and proactive memory.
+
+**Target features:**
+- Backend security & reliability: guest key leak, SSE reader lock, BYOK 402 copy
+- UI bugs: delete X bubble, hamburger desktop fix, guest banner stale state, remove dead suggestion
+- UX: in-progress indicator + status copy, markdown rendering
+- Memory: memory_save tool for agent-driven memory creation
+- Agent upgrade: prompt audit + actor-critic loop + effort slider
+- Ollama: dynamic model detection fix
 
 ## What This Is
 
@@ -37,14 +49,37 @@ A recruiter can paste a link, upload a document, or ask a question and get a fas
 - ✓ BYOK 402 message now provider-aware (CR-04) — Phase 6
 - ✓ BadRequestError no longer echoes user query (CR-02) — Phase 6
 
-### Active
+### Active (v2.0)
 
-- [ ] Fix missing try/catch in handleDeleteConversation (Phase 4 code review debt) — unhandled rejection on network failure
-- [ ] `resolve_api_key` always returns openai_api_key for guests regardless of provider — guests on Anthropic/Ollama get wrong key (Phase 6 code review CR-01)
-- [ ] SSE reader lock never released — `reader.releaseLock()` missing in ChatPage.tsx (Phase 6 code review WR-02)
-- [ ] BYOK 402 frontend still shows hardcoded "OpenAI API key" despite provider-aware backend (Phase 6 code review WR-03)
-- [ ] "No results" path in web_search.py echoes raw user query — same pattern as CR-02 fix (Phase 6 code review WR-04)
-- [ ] `hoverHideTimeoutRef` not cleaned up on ChatPage unmount (Phase 6 code review WR-05)
+**Code Review Debt**
+- [ ] **DEBT-01**: Guest on Anthropic/Ollama provider receives correct system key (not OpenAI key)
+- [ ] **DEBT-02**: SSE reader lock released in finally block after stream ends or errors
+- [ ] **DEBT-03**: BYOK 402 response body read in frontend; user sees provider-correct copy
+
+**UI Bugs**
+- [ ] **UI-01**: Conversation delete button has circular bubble, dark/light mode colors, top-right position
+- [ ] **UI-02**: Hamburger hidden on desktop (sidebar permanently pinned); toggle works on mobile
+- [ ] **UI-03**: Guest banner dismisses and model picker enables after guest→login to existing account
+- [ ] **UI-04**: "Generate images" removed from starter prompt suggestions
+
+**UX Improvements**
+- [ ] **UX-01**: In-progress indicator visible during synthesis gap (tool result → first synthesis token)
+- [ ] **UX-02**: Max-3-word status label shown outside chat bubble during agent processing
+- [ ] **UX-03**: Chat messages rendered as markdown; links styled blue with hover
+
+**Memory**
+- [ ] **MEM-01**: Agent can call memory_save tool to persist a fact/preference during conversation
+- [ ] **MEM-02**: System prompt includes guidance on when to proactively save memories
+
+**Agent Upgrade**
+- [ ] **AGT-01**: System prompt and tool descriptions audited and improved for task completion quality
+- [ ] **AGT-02**: Agent performs self-critique pass before final answer (actor-critic)
+- [ ] **AGT-03**: UI exposes Effort slider (Fast / Balanced / Thorough) controlling reasoning depth
+- [ ] **AGT-04**: Backend respects effort level to gate actor-critic pass
+
+**Ollama**
+- [ ] **OLL-01**: Ollama model picker renders dynamic model list after OLLAMA_BASE_URL saved in settings
+- [ ] **OLL-02**: Backend rewrites localhost → host.docker.internal for Ollama URL (or surfaces clear guidance)
 
 ### Out of Scope
 
