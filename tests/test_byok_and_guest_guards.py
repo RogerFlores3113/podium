@@ -46,6 +46,13 @@ def test_authenticated_user_without_byok_raises_402():
     assert exc_info.value.detail["error"] == "byok_required"
 
 
+def test_ollama_provider_bypasses_byok_check():
+    """MODEL-03: Ollama uses local endpoint, not an API key — no BYOK required."""
+    user = _make_user(is_guest=False)
+    result = resolve_api_key(user, user_key=None, provider="ollama")
+    assert result == ""
+
+
 # --- guest tool filtering ---
 
 def test_guest_allowed_tools_excludes_python_executor():

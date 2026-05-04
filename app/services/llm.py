@@ -144,15 +144,18 @@ async def get_user_api_key(
     return decrypted
 
 
-def resolve_api_key(user: User, user_key: str | None) -> str:
+def resolve_api_key(user: User, user_key: str | None, provider: str = "") -> str:
     """
     Return the API key to use for a request.
 
     Guests always use the system key (cost-controlled via model + rate limits).
+    Ollama uses a local endpoint — no API key required.
     Authenticated users must have a BYOK key; 402 if they don't.
     """
     if user.is_guest:
         return settings.openai_api_key
+    if provider == "ollama":
+        return ""
     if not user_key:
         raise HTTPException(
             status_code=402,

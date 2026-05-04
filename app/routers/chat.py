@@ -175,7 +175,7 @@ async def chat_stream(
 
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
-    resolved_api_key = resolve_api_key(user, user_api_key)
+    resolved_api_key = resolve_api_key(user, user_api_key, provider=provider)
 
     # Load core memories for prompt injection
     core_memories = await retrieve_core_memories(db, user_id)
