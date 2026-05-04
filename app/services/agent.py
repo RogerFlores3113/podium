@@ -205,7 +205,7 @@ async def _run_responses_agent(
                 final_text = accumulated_text
                 if effort != "fast" and not is_guest:
                     final_text = await _actor_critic(
-                        final_text, [], api_key, model
+                        final_text, [], model
                     )
                 yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
@@ -269,7 +269,6 @@ async def _run_responses_agent(
 async def _actor_critic(
     initial_answer: str,
     messages: list[dict],
-    api_key: str | None,
     model: str | None,
 ) -> str:
     """
@@ -481,7 +480,7 @@ async def run_agent(
             if effort != "fast" and not is_guest:
                 # Actor-critic self-critique pass (AGT-02, AGT-04, D-09-03)
                 final_text = await _actor_critic(
-                    final_text, messages, resolved_api_key, resolved_model
+                    final_text, messages, resolved_model
                 )
             yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
