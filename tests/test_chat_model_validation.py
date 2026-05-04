@@ -30,7 +30,8 @@ async def test_stream_rejects_disabled_ollama_model():
     try:
         with patch("app.routers.chat.settings") as mock_settings, \
              patch("app.main.engine") as mock_engine, \
-             patch("arq.create_pool", new=AsyncMock(return_value=mock_redis)):
+             patch("arq.create_pool", new=AsyncMock(return_value=mock_redis)), \
+             patch("slowapi.extension.Limiter._check_request_limit"):
             mock_settings.ollama_base_url = ""
             mock_settings.guest_max_messages_per_session = 10
             mock_engine.begin.return_value = mock_engine_cm
