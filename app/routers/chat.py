@@ -116,6 +116,12 @@ async def chat_stream(
     """
     user_id = user.clerk_id
 
+    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models)
+    if body.model:
+        active_model_ids = {m["id"] for m in await list_models()}
+        if body.model not in active_model_ids:
+            raise HTTPException(status_code=422, detail="Model not available")
+
     # Enforce guest message cap before doing any DB work
     if user.is_guest:
         count_result = await db.execute(
@@ -166,12 +172,6 @@ async def chat_stream(
     )
     db.add(user_message)
     await db.flush()
-
-    # Validate model against active roster (MODEL-03 security: reject disabled Ollama models)
-    if body.model:
-        active_model_ids = {m["id"] for m in await list_models()}
-        if body.model not in active_model_ids:
-            raise HTTPException(status_code=422, detail="Model not available")
 
     provider = provider_for_model(body.model or settings.chat_model)
     user_api_key = await get_user_api_key(db, user_id, provider)
