@@ -110,8 +110,17 @@ async def build_conversation_history(
 
     history.reverse()
 
+    # Recompute token count from the final history after orphan cleanup passes,
+    # since orphan removal may have dropped messages that were counted above.
+    actual_token_count = sum(
+        count_tokens(
+            (h.get("content") or "")
+            + (json.dumps(h["tool_calls"]) if h.get("tool_calls") else "")
+        )
+        for h in history
+    )
     logger.info(
-        f"Conversation history: {len(history)} messages, ~{token_count} tokens"
+        f"Conversation history: {len(history)} messages, ~{actual_token_count} tokens (after orphan cleanup)"
     )
     return history
 
