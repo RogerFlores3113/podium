@@ -18,7 +18,10 @@ def test_available_models_have_required_fields():
         assert model["provider"] in ("openai", "anthropic", "ollama")
 
 
-def test_provider_for_known_models():
+def test_provider_for_exact_roster_match():
+    # Tests the exact-ID branch of provider_for_model: gpt-5-nano is in AVAILABLE_MODELS.
+    # Distinct from test_provider_for_unknown_openai_prefix, which tests prefix fallback
+    # using gpt-3.5-turbo (a model NOT in the approved roster).
     assert provider_for_model("gpt-5-nano") == "openai"
 
 
