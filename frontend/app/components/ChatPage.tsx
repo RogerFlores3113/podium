@@ -70,17 +70,6 @@ export default function ChatPage() {
     } catch {
       // private browsing
     }
-    // Detect guest session
-    try {
-      const guestToken = sessionStorage.getItem("podium_guest_token");
-      const guestExpires = sessionStorage.getItem("podium_guest_expires");
-      if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
-        // Only set guest if Clerk has not already confirmed sign-in (avoids stale flag during Clerk load)
-        if (!isSignedIn) setIsGuest(true);
-      }
-    } catch {
-      // sessionStorage unavailable
-    }
     // Fetch available base models (unauthenticated). Ollama models are fetched in the
     // isSignedIn effect — authFetch requires Clerk to have hydrated first.
     void (async () => { try {
@@ -99,6 +88,21 @@ export default function ChatPage() {
     // Open sidebar by default on wider screens
     if (window.innerWidth >= 768) setSidebarOpen(true);
   }, []);
+
+  // Gate guest detection on isLoaded so we never read isSignedIn while Clerk
+  // is still hydrating (at that point isSignedIn === undefined, and !undefined
+  // is true, which would incorrectly mark signed-in users as guests).
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn) return;
+    try {
+      const guestToken = sessionStorage.getItem("podium_guest_token");
+      const guestExpires = sessionStorage.getItem("podium_guest_expires");
+      if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
+        setIsGuest(true);
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }, [isLoaded, isSignedIn]);
 
   const toggleDark = () => {
     const next = !darkMode;
