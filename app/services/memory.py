@@ -180,7 +180,7 @@ async def persist_memories(
             },
         )
         dup_row = dup_result.fetchone()
-        if dup_row and dup_row.similarity >= 0.95:
+        if dup_row and dup_row.similarity >= 0.85:
             logger.info(
                 f"Skipping duplicate memory for user {user_id} "
                 f"(similarity={dup_row.similarity:.3f}): {mem_data['content'][:60]}"
