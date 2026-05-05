@@ -3,7 +3,6 @@ import logging
 import os
 from urllib.parse import urlparse, urlunparse
 
-from litellm import acompletion
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,12 +17,6 @@ from app.services.encryption import (
 )
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's personal knowledge base.
-Use the provided context to answer the user's question accurately.
-If the context doesn't contain relevant information, say so honestly — don't make things up.
-When referencing information from the context, be specific about what you found."""
-
 
 async def build_conversation_history(
     db: AsyncSession,
@@ -83,27 +76,6 @@ async def build_conversation_history(
         f"Conversation history: {len(history)} messages, ~{token_count} tokens"
     )
     return history
-
-
-def build_context_string(chunks: list[dict], max_tokens: int) -> str:
-    """
-    Build a context string from retrieved chunks, fitting within a token budget.
-
-    Chunks are assumed to be pre-sorted by relevance (most relevant first).
-    """
-    parts = []
-    token_count = 0
-
-    for chunk in chunks:
-        chunk_str = f"[Relevance: {chunk['similarity']:.2f}]\n{chunk['content']}"
-        chunk_tokens = count_tokens(chunk_str)
-        if token_count + chunk_tokens > max_tokens:
-            break
-        parts.append(chunk_str)
-        token_count += chunk_tokens
-
-    logger.info(f"Context: {len(parts)}/{len(chunks)} chunks, ~{token_count} tokens")
-    return "\n\n---\n\n".join(parts)
 
 
 async def get_user_api_key(
