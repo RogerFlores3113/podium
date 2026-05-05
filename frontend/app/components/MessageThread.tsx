@@ -29,7 +29,6 @@ const toolPhaseCopy = (name: string): string =>
 interface MessageThreadProps {
   messages: Message[];
   isThinking: boolean;
-  isLoading: boolean;
   showCapabilityCards: boolean;
   onCardClick: (prompt: string) => void;
 }
@@ -37,7 +36,6 @@ interface MessageThreadProps {
 export default function MessageThread({
   messages,
   isThinking,
-  isLoading: _isLoading,
   showCapabilityCards,
   onCardClick,
 }: MessageThreadProps) {
