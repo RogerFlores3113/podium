@@ -348,7 +348,7 @@ async def chat_stream(
             await db.rollback()
             yield {
                 "event": "error",
-                "data": json.dumps({"detail": str(e)}),
+                "data": json.dumps({"detail": "An unexpected error occurred. Please try again."}),
             }
         finally:
             await db.commit()

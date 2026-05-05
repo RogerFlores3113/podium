@@ -123,7 +123,7 @@ async def _run_responses_agent(
             )
         except Exception as e:
             logger.error(f"Responses API call failed: {e}", exc_info=True)
-            yield {"type": "error", "detail": f"LLM error: {str(e)}"}
+            yield {"type": "error", "detail": "An unexpected error occurred. Please try again."}
             return
 
         accumulated_text = ""
@@ -379,7 +379,7 @@ async def run_agent(
             )
         except Exception as e:
             logger.error(f"LLM call failed: {e}", exc_info=True)
-            yield {"type": "error", "detail": f"LLM error: {str(e)}"}
+            yield {"type": "error", "detail": "An unexpected error occurred. Please try again."}
             return
 
         # Accumulators for this iteration
