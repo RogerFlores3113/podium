@@ -1205,7 +1205,7 @@ describe("ollama model fetch timing", () => {
     });
   });
 
-  it("does NOT fetch ollama-models for guest users even when isSignedIn is true", async () => {
+  it("DOES fetch ollama-models for users who were guests but are now signed in (D-03: dead isGuest guard removed)", async () => {
     sessionStorage.setItem("podium_guest_token", "tok");
     sessionStorage.setItem(
       "podium_guest_expires",
@@ -1217,19 +1217,20 @@ describe("ollama model fetch timing", () => {
     const { rerender } = render(<ChatPage />);
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
-    // Even if Clerk says signed-in, guest flag should block ollama fetch
+    // After sign-in, isGuest may still be true (stale) but ollama fetch must NOT be blocked.
+    // D-03 removed the dead `if (!isGuest)` guard so isSignedIn alone gates the fetch.
     mockIsSignedIn = true;
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 }),
     );
     rerender(<ChatPage />);
 
-    await new Promise((r) => setTimeout(r, 30));
-
-    const ollamaCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
-      String(url).includes("ollama-models"),
-    );
-    expect(ollamaCalls.length).toBe(0);
+    await waitFor(() => {
+      const ollamaCalls = fetchSpy.mock.calls.filter(([url]: [unknown]) =>
+        String(url).includes("ollama-models"),
+      );
+      expect(ollamaCalls.length).toBeGreaterThan(0);
+    });
   });
 
   it("merges ollama models into availableModels using functional updater (no stale state)", async () => {
