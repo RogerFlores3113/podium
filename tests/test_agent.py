@@ -2,10 +2,12 @@
 
 import pytest
 from app.services.agent import (
+    GUEST_ALLOWED_TOOLS,
     RESPONSES_API_MODELS,
     _to_responses_input,
     _to_responses_tools,
 )
+from app.tools import get_tool_schemas
 
 
 def test_responses_api_models_contains_gpt5_nano():
@@ -62,6 +64,38 @@ def test_to_responses_input_tool_call_and_result():
     assert result[1]["type"] == "function_call_output"
     assert result[1]["call_id"] == "call_1"
     assert result[1]["output"] == "Search results here"
+
+
+# ---------------------------------------------------------------------------
+# D-02: GUEST_ALLOWED_TOOLS and guest system prompt
+# ---------------------------------------------------------------------------
+
+def test_guest_allowed_tools_includes_python_executor():
+    """D-02: Guest tool set must include python_executor (sandbox is available to guests)."""
+    assert "python_executor" in GUEST_ALLOWED_TOOLS
+
+
+def test_guest_allowed_tools_excludes_memory_save():
+    """D-02: memory_save must remain excluded from guest sessions."""
+    assert "memory_save" not in GUEST_ALLOWED_TOOLS
+
+
+def test_guest_tool_schemas_include_python_executor():
+    """D-02: The filtered tool schemas for guests must contain python_executor."""
+    all_schemas = get_tool_schemas()
+    guest_schemas = [t for t in all_schemas if t["function"]["name"] in GUEST_ALLOWED_TOOLS]
+    guest_tool_names = {t["function"]["name"] for t in guest_schemas}
+    assert "python_executor" in guest_tool_names, (
+        f"python_executor not in guest schemas: {guest_tool_names}"
+    )
+
+
+def test_guest_tool_schemas_exclude_memory_save():
+    """D-02: The filtered tool schemas for guests must not contain memory_save."""
+    all_schemas = get_tool_schemas()
+    guest_schemas = [t for t in all_schemas if t["function"]["name"] in GUEST_ALLOWED_TOOLS]
+    guest_tool_names = {t["function"]["name"] for t in guest_schemas}
+    assert "memory_save" not in guest_tool_names
 
 
 def test_to_responses_tools_format():
