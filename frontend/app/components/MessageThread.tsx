@@ -51,6 +51,7 @@ interface MessageThreadProps {
   isThinking: boolean;
   showCapabilityCards: boolean;
   onCardClick: (prompt: string) => void;
+  isGuest?: boolean;
 }
 
 export default function MessageThread({
@@ -58,6 +59,7 @@ export default function MessageThread({
   isThinking,
   showCapabilityCards,
   onCardClick,
+  isGuest = false,
 }: MessageThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -176,7 +178,7 @@ export default function MessageThread({
       {/* Capability cards — shown only on fresh conversation */}
       {showCapabilityCards && (
         <div className="grid grid-cols-2 gap-2 mt-4">
-          {CAPABILITY_CARDS.map((card) => (
+          {CAPABILITY_CARDS.filter((card) => !(isGuest && card.label === "Remember something")).map((card) => (
             <button
               key={card.label}
               onClick={() => onCardClick(card.prompt)}

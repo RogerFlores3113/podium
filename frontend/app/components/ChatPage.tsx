@@ -659,6 +659,7 @@ export default function ChatPage() {
             isThinking={isThinking}
             showCapabilityCards={showCapabilityCards}
             onCardClick={handleCardClick}
+            isGuest={isGuest}
           />
 
           <ChatComposer
