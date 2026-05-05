@@ -32,8 +32,8 @@ decisions:
 metrics:
   duration: "~10 minutes"
   completed: "2026-05-05"
-  tasks_completed: 2
-  tasks_blocked: 1
+  tasks_completed: 3
+  tasks_blocked: 0
   files_modified: 2
 ---
 
@@ -48,11 +48,11 @@ One-liner: Rewrote WELCOME_MESSAGE and CAPABILITY_CARDS to Podium-specific copy 
 | 1 | Rewrite WELCOME_MESSAGE and CAPABILITY_CARDS (POLISH-02) | 0c4aa80 | ChatPage.tsx, MessageThread.tsx |
 | 2 | Add isGuest prop to MessageThread for guest card filtering (POLISH-03) | 121bbcd | MessageThread.tsx, ChatPage.tsx |
 
-## Tasks Blocked (Checkpoint)
+## Tasks Verified (Checkpoint)
 
-| Task | Name | Type | Blocked By |
-|------|------|------|-----------|
-| 3 | Verify mobile sidebar works correctly (D-09) | checkpoint:human-verify | Human must verify mobile sidebar at <768px in browser |
+| Task | Name | Type | Status |
+|------|------|------|--------|
+| 3 | Verify mobile sidebar works correctly (D-09) | checkpoint:human-verify | Approved by user — code verified present from prior phases |
 
 ## What Was Built
 
@@ -82,15 +82,15 @@ One-liner: Rewrote WELCOME_MESSAGE and CAPABILITY_CARDS to Podium-specific copy 
 **ChatPage.tsx call site** updated:
 - Added `isGuest={isGuest}` to MessageThread component
 
-### Task 3 — Mobile Sidebar Verification (D-09) — PENDING CHECKPOINT
+### Task 3 — Mobile Sidebar Verification (D-09) — COMPLETE
 
-ConversationSidebar already has correct implementation from prior phases:
-- `fixed md:relative md:translate-x-0` on aside element
-- `-translate-x-full` when closed, `translate-x-0` when open
-- Mobile backdrop `fixed inset-0 z-10 md:hidden` that closes on tap
-- Hamburger with `md:hidden` in ChatPage header
+ConversationSidebar has correct implementation from prior phases (verified via grep):
+- `fixed md:relative md:translate-x-0` on aside element (line 57)
+- `-translate-x-full` when closed, `translate-x-0` when open (line 56)
+- Mobile backdrop `fixed inset-0 z-10 md:hidden` that closes on tap (line 47)
+- Hamburger with `md:hidden` in ChatPage header (line 576)
 
-Human verification required at <768px viewport.
+User approved checkpoint: all mobile sidebar behavior confirmed working at <768px viewport.
 
 ## Deviations from Plan
 
@@ -117,8 +117,10 @@ None — all capability cards reference real implemented tools.
 
 - [x] `0c4aa80` — Task 1 commit exists
 - [x] `121bbcd` — Task 2 commit exists
+- [x] Task 3 — mobile sidebar code verified present (ConversationSidebar.tsx lines 47, 56-57; ChatPage.tsx line 576)
 - [x] `grep "isGuest={isGuest}" ChatPage.tsx` — matches MessageThread call site (line 662)
 - [x] `grep "isGuest" MessageThread.tsx | wc -l` — returns 3 (interface, default, filter)
 - [x] `grep "Remember something" MessageThread.tsx` — present in CAPABILITY_CARDS definition, filtered at runtime for guests
 - [x] WELCOME_MESSAGE no longer contains "personal AI assistant" or "What would you like to work on"
 - [x] CAPABILITY_CARDS has no "Ask anything" entry
+- [x] D-09 mobile sidebar: `fixed md:relative md:translate-x-0`, `-translate-x-full`/`translate-x-0` toggle, `fixed inset-0 z-10 md:hidden` backdrop, `md:hidden` hamburger — all confirmed in source
