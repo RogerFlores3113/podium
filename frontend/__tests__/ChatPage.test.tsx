@@ -10,6 +10,7 @@ vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
     getToken: stableGetToken,
     isSignedIn: mockIsSignedIn,
+    isLoaded: true,
   }),
   UserButton: () => <div data-testid="user-button" />,
 }));

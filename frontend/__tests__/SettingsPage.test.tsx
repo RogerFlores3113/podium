@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
     getToken: vi.fn().mockResolvedValue("test-token"),
+    isLoaded: true,
   }),
   UserButton: () => <div data-testid="user-button" />,
 }));
