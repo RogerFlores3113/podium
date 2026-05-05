@@ -1,8 +1,8 @@
 # Podium — Polish, Reliability & AI Upgrade
 
-## Current Milestone: v2.0 Polish & Reliability
+## Current Milestone: v3.0 Unquestionably Clean — COMPLETE (2026-05-05)
 
-**Goal:** Clear v1.0 code review debt, ship UX improvements, and upgrade the agent with actor-critic reasoning and proactive memory.
+**Goal:** Audit and remove test dead weight, extract modules for single-responsibility, split the monolith ChatPage, fix remaining bugs, and ship visual polish.
 
 **Target features:**
 - Backend security & reliability: guest key leak, SSE reader lock, BYOK 402 copy
@@ -134,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after Phase 6 (PR #14 Audit & Smoke Test) — Stabilization & Hardening milestone complete*
+*Last updated: 2026-05-05 after Phase 11 (Refactor & Test Audit) — v3.0 Unquestionably Clean in progress. REFACTOR-01–05 validated. Branch: v3-cleanup.*
