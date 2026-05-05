@@ -44,6 +44,26 @@ ALB (AWS) ──► ECS Fargate: API (FastAPI + SSE streaming)
 
 ---
 
+## Why this stack
+
+**FastAPI + SSE streaming** — FastAPI's async-first design pairs naturally with server-sent events. When the agent chains multiple tool calls before responding, the user sees real-time progress rather than a blank wait. A synchronous framework would have required polling or WebSockets with more complexity.
+
+**LiteLLM** — Single interface for OpenAI, Anthropic, and local Ollama models. Adding a new provider is one line of config, not a new integration. The alternative (direct SDK calls per provider) would have meant 3x the API-interaction code to maintain.
+
+**pgvector with HNSW index** — Postgres already handles auth, conversations, and documents — adding pgvector avoids a separate vector database service, reducing infra cost and operational complexity. HNSW (hierarchical navigable small world) gives O(log n) approximate nearest-neighbor search without a full index scan.
+
+**arq (async Redis queue) + Valkey** — Memory extraction runs in the background after each conversation without blocking the SSE stream. arq is a lightweight job queue that runs in the same Python process ecosystem; Valkey is a Redis-compatible open-source fork that replaced ElastiCache at ~10% of the cost on a t4g.nano.
+
+**Clerk** — Auth is the highest-risk surface to hand-roll. Clerk provides JWKS-backed JWT verification, session management, and social login. The tradeoff is a vendor dependency; the mitigation is that the custom HS256 guest JWT path shows the underlying auth mechanics clearly.
+
+**Next.js 14 App Router + Tailwind** — App Router supports React Server Components for static routes (landing, settings) while client components handle streaming chat. Tailwind's utility classes keep the component CSS co-located and avoid stylesheet sprawl.
+
+**E2B sandboxed Python execution** — The alternative (subprocess on the API server) is a security hole. E2B runs user code in an isolated VM with a timeout; the only attack surface is what the agent constructs as a code string, which is already constrained by the system prompt.
+
+**AWS ECS Fargate on public subnets** — Avoids NAT Gateway charges ($32+/mo) by assigning a public IP to each task. The tradeoff is that security groups must be strict (they are: only ports 80/443 from the ALB). This cut infrastructure cost from ~$120/mo to ~$45/mo.
+
+---
+
 ## What I built and learned
 
 - Wrote a dual-auth middleware that tries Clerk RS256 first, falls back to HS256 guest JWTs — handles two completely different token shapes in one path cleanly
