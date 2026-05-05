@@ -43,8 +43,8 @@ Never end your turn with only tool calls and no text — always follow tool resu
 """
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
-    {"document_search", "memory_search", "web_search", "url_reader"}
-    # python_executor and memory_save are absent — guests cannot execute code or save memories
+    {"document_search", "memory_search", "web_search", "url_reader", "python_executor"}
+    # memory_save excluded — guests cannot persist memories
 )
 
 
