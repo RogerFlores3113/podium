@@ -20,7 +20,7 @@ class DocumentResponse(BaseModel):
 # --- Chat ---
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=32_000)
     conversation_id: uuid.UUID | None = None
     model: str | None = None  # Override default chat_model for this request
     effort: Literal["fast", "balanced", "thorough"] = "balanced"  # Effort level — gates actor-critic pass (AGT-04, D-09-04)
