@@ -4,6 +4,7 @@ import logging
 from sse_starlette.sse import EventSourceResponse
 
 import httpx
+import litellm
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -311,6 +312,14 @@ async def chat_stream(
                         "event": "error",
                         "data": json.dumps({"detail": agent_event["detail"]}),
                     }
+        except litellm.AuthenticationError:
+            provider = provider_for_model(body.model or "").title() or "provider"
+            logger.warning(f"BYOK authentication failed for model {body.model}")
+            await db.rollback()
+            yield {
+                "event": "error",
+                "data": json.dumps({"detail": f"Invalid API key for {provider}. Update your key in Settings."}),
+            }
         except Exception as e:
             logger.error(f"Chat stream failed: {e}", exc_info=True)
             await db.rollback()

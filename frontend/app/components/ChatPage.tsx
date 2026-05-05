@@ -82,7 +82,7 @@ export default function ChatPage() {
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, isLoaded } = useAuth();
 
   useEffect(() => {
     try {
@@ -163,8 +163,8 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    if (isLoaded) fetchConversations();
+  }, [isLoaded, fetchConversations]);
 
   // Reactive guest cleanup: when Clerk confirms sign-in, clear guest state and
   // reload conversation list so sidebar populates without a page refresh.
@@ -631,8 +631,8 @@ export default function ChatPage() {
                       e.stopPropagation();
                       handleDeleteConversation(conv.id);
                     }}
-                    className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center text-sm rounded-full transition-opacity hover:opacity-80"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-base rounded-full transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
                   >
                     ×
                   </button>
@@ -782,7 +782,29 @@ export default function ChatPage() {
                     >
                       {msg.role === "assistant" ? (
                         <div className="prose prose-sm max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code: ({ className, children, ...props }) => {
+                                const isBlock = Boolean(className);
+                                if (isBlock) return <code className={className} {...props}>{children}</code>;
+                                return (
+                                  <code
+                                    style={{
+                                      fontFamily: "monospace",
+                                      background: "var(--bg-elevated)",
+                                      padding: "0.1em 0.35em",
+                                      borderRadius: "3px",
+                                      fontSize: "0.875em",
+                                    }}
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          >
                             {msg.content}
                           </ReactMarkdown>
                         </div>

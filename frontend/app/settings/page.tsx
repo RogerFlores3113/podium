@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -26,6 +26,7 @@ interface MemoryInfo {
 
 export default function SettingsPage() {
   const authFetch = useAuthFetch();
+  const { isLoaded } = useAuth();
 
   // API keys state
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -154,10 +155,10 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    loadKeys();
+    if (isLoaded) loadKeys();
     // loadMemories is called by the categoryFilter effect on mount and on filter changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isLoaded]);
 
   useEffect(() => {
     return () => {
@@ -166,9 +167,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    loadMemories();
+    if (isLoaded) loadMemories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryFilter]);
+  }, [isLoaded, categoryFilter]);
 
   const startEditing = (memory: MemoryInfo) => {
     setEditingId(memory.id);
