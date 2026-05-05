@@ -55,22 +55,27 @@ def test_ollama_provider_bypasses_byok_check():
 
 # --- guest tool filtering ---
 
-def test_guest_allowed_tools_excludes_python_executor():
-    assert "python_executor" not in GUEST_ALLOWED_TOOLS
+def test_guest_allowed_tools_includes_python_executor():
+    """D-02: python_executor is sandboxed (E2B) and must be available to guests."""
+    assert "python_executor" in GUEST_ALLOWED_TOOLS
 
 
 def test_guest_allowed_tools_includes_expected_tools():
-    assert GUEST_ALLOWED_TOOLS == {"document_search", "memory_search", "web_search", "url_reader"}
+    assert GUEST_ALLOWED_TOOLS == {
+        "document_search", "memory_search", "web_search", "url_reader", "python_executor"
+    }
 
 
-def test_tool_filter_for_guest_removes_python_executor():
+def test_tool_filter_for_guest_includes_python_executor():
+    """D-02: Guest filtered schemas must include python_executor (E2B sandbox is safe for guests)."""
     all_schemas = get_tool_schemas()
     all_names = {t["function"]["name"] for t in all_schemas}
     assert "python_executor" in all_names
 
     guest_schemas = [t for t in all_schemas if t["function"]["name"] in GUEST_ALLOWED_TOOLS]
     guest_names = {t["function"]["name"] for t in guest_schemas}
-    assert "python_executor" not in guest_names
+    assert "python_executor" in guest_names
+    assert "memory_save" not in guest_names
     assert guest_names == GUEST_ALLOWED_TOOLS
 
 
