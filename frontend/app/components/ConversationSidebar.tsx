@@ -12,6 +12,7 @@ interface ConversationSidebarProps {
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  onRenameConversation: (id: string, newTitle: string) => Promise<void>;
 }
 
 export default function ConversationSidebar({
@@ -22,9 +23,21 @@ export default function ConversationSidebar({
   onNewConversation,
   onSelectConversation,
   onDeleteConversation,
+  onRenameConversation,
 }: ConversationSidebarProps) {
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+
+  const commitRename = (id: string, newTitle: string) => {
+    // Set editingId to null immediately to prevent double-commit on blur+enter
+    setEditingId(null);
+    const trimmed = newTitle.trim();
+    if (trimmed) {
+      void onRenameConversation(id, trimmed);
+    }
+  };
 
   return (
     <>
@@ -116,12 +129,36 @@ export default function ConversationSidebar({
                   border: conv.id === activeConversationId ? "1px solid var(--border)" : "1px solid transparent",
                 }}
               >
-                <div
-                  className="text-sm truncate"
-                  style={{ color: "var(--text-primary)" }}
-                >
-                  {conv.title || "Untitled"}
-                </div>
+                {editingId === conv.id ? (
+                  <input
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename(conv.id, editTitle);
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                    onBlur={() => {
+                      // editingId is already null if commitRename was called via Enter
+                      if (editingId === conv.id) commitRename(conv.id, editTitle);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-sm w-full bg-transparent border-b focus:outline-none"
+                    style={{ color: "var(--text-primary)" }}
+                  />
+                ) : (
+                  <div
+                    className="text-sm truncate"
+                    style={{ color: "var(--text-primary)" }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setEditingId(conv.id);
+                      setEditTitle(conv.title || "");
+                    }}
+                  >
+                    {conv.title || "Untitled"}
+                  </div>
+                )}
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                   {formatRelativeTime(conv.created_at)}
                 </div>
