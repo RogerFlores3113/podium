@@ -29,14 +29,20 @@ export default function ConversationSidebar({
   const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const commitPendingRef = useRef(false);
 
   const commitRename = (id: string, newTitle: string) => {
-    // Set editingId to null immediately to prevent double-commit on blur+enter
+    // Guard against double-commit: Enter fires commitRename then blur fires onBlur,
+    // but setEditingId(null) is async so the stale closure still sees editingId === id.
+    if (commitPendingRef.current) return;
+    commitPendingRef.current = true;
     setEditingId(null);
     const trimmed = newTitle.trim();
     if (trimmed) {
       void onRenameConversation(id, trimmed);
     }
+    // Reset after the event loop tick so any pending blur can still see the guard.
+    setTimeout(() => { commitPendingRef.current = false; }, 0);
   };
 
   return (
