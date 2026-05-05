@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 Stabilization & Hardening** — Phases 1-6 (shipped 2026-05-04)
-- 🚧 **v2.0 Polish, Reliability & AI Upgrade** — Phases 7-10 (in progress)
+- ✅ **v2.0 Polish, Reliability & AI Upgrade** — Phases 7-10 (shipped 2026-05-04)
+- 🚧 **v3.0 Unquestionably Clean** — Phases 11-13 (in progress)
 
 ## Phases
 
@@ -245,5 +246,51 @@ Plans:
 | 10. Agent UI & Dynamic Ollama | v2.0 | 0/TBD | Not started | - |
 
 ---
-*Roadmap defined: 2026-05-03 (v1.0) / 2026-05-04 (v2.0 phases added)*
-*Last updated: 2026-05-04 — Phase 8 complete. 57/57 tests passing. 8 requirements verified.*
+
+## v3.0 Unquestionably Clean
+
+**Milestone Goal:** Audit and remove test dead weight, extract modules for single-responsibility, split the monolith ChatPage, fix remaining bugs, and ship visual polish.
+
+### Phase Checklist
+
+- [x] **Phase 11: Refactor & Test Audit** — Delete 4 implementation-detail test files, extract critic.py, split ChatPage.tsx into 4 focused components. (completed 2026-05-05)
+- [x] **Phase 12: Bug Fixes** — Fix CR-01 actor-critic fallback guard, CR-02 tool message handling, CR-03 handleDeleteConversation error handling, and other review findings. (completed 2026-05-05)
+- [ ] **Phase 13: Visual Polish & Deploy** — Final visual polish and production deployment.
+
+## Phase Details (v3.0)
+
+### Phase 11: Refactor & Test Audit
+**Goal:** Test suite tests behavior not implementation; each backend module has one clear purpose; ChatPage.tsx is split into focused sub-components.
+**Requirements:** REFACTOR-01, REFACTOR-02, REFACTOR-03, REFACTOR-04, REFACTOR-05
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 11-01-PLAN.md — Delete 4 stale test files; remove stale model ID assertions from test_config.py (Wave 1)
+- [x] 11-02-PLAN.md — Extract _actor_critic → critic.py; remove dead code from llm.py (Wave 1, parallel)
+- [x] 11-03-PLAN.md — Split ChatPage.tsx into ConversationSidebar, MessageThread, ChatComposer + shared types (Wave 2)
+
+### Phase 12: Bug Fixes
+**Goal:** Fix all Critical and Warning findings from Phase 11 code review; all backend and frontend tests pass.
+**Requirements:** CR-01, CR-02, CR-03, WR-01, WR-02, WR-03, WR-04, WR-05, WR-06, IN-01
+**Plans:** 2 plans
+
+Plans:
+- [x] 12-01-PLAN.md — Backend fixes: critic double-guard, try/except, standard_messages, tool [no output], LIMIT 200, orphan drop, test rename, prompt fix (Wave 1)
+- [x] 12-02-PLAN.md — Frontend fixes: handleDeleteConversation try/catch, loadConversation guard, guest isSignedIn check, remove dead isLoading prop (Wave 2)
+
+### Phase 13: Visual Polish & Deploy
+**Goal:** Final visual polish and production deployment.
+**Requirements:** TBD
+**Plans:** 0 plans (not started)
+
+## Progress (v3.0)
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 11. Refactor & Test Audit | v3.0 | 3/3 | Complete | 2026-05-05 |
+| 12. Bug Fixes | v3.0 | 2/2 | Complete | 2026-05-05 |
+| 13. Visual Polish & Deploy | v3.0 | 0/TBD | Not started | — |
+
+---
+*Roadmap defined: 2026-05-03 (v1.0) / 2026-05-04 (v2.0 phases added) / 2026-05-05 (v3.0 phases added)*
+*Last updated: 2026-05-05 — Phase 12 complete. 94 backend + 67 frontend tests passing. 10 bug-fix requirements verified.*

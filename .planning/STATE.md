@@ -1,42 +1,41 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Polish, Reliability & AI Upgrade
-status: Ready for Phase 9
-last_updated: "2026-05-04T10:56:01.371Z"
-last_activity: 2026-05-04
+milestone: v3.0
+milestone_name: Unquestionably Clean
+status: In progress
+last_updated: "2026-05-05T17:05:00.000Z"
+last_activity: 2026-05-05
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  total_phases: 7
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 6
+  percent: 29
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04)
+See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** A recruiter can ask a question and get a fast, reliable, clearly-presented answer with no silent failures.
-**Current focus:** Phase 9 — Memory & Agent Core
+**Current focus:** Phase 12 — Bug Fixes
 
 ## Phase Status
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Backend Debt & Security | 1/1 | Complete | 2026-05-04 |
-| 8. Frontend Bugs & Polish | 2/2 | Complete | 2026-05-04 |
-| 9. Memory & Agent Core | 4/4 | Complete | 2026-05-04 |
-| 10. Agent UI & Dynamic Ollama | 0/TBD | Not started | - |
+| 11. Refactor & Test Audit | 3/3 | Complete | 2026-05-05 |
+| 12. Bug Fixes | 2/2 | Complete | 2026-05-05 |
+| 13. Visual Polish & Deploy | 0/0 | Not started | — |
 
 ## Current Position
 
-Phase: 9
-Plan: 4/4
-Status: Ready for Phase 10
-Last activity: 2026-05-04
+Phase: 13
+Plan: 0/0
+Status: Not started
+Last activity: 2026-05-05
 
 ## Accumulated Context
 
@@ -80,4 +79,18 @@ Last activity: 2026-05-04
 
 ## Last Updated
 
-2026-05-04 — Phase 9 context gathered (auto mode). memory_save tool, actor-critic, effort field decisions locked. 2 plans, 1 wave. UI-01/02/03/04, DEBT-03, UX-01/02/03 implemented. 57/57 tests passing (5 new: UI-02 hamburger, UI-03 guest cleanup, UI-04 no generate images, DEBT-03 BYOK provider copy, UX-01 synthesis gap indicator). Key commits: 403fed2 → 3c9fd61 → a584ec2 (08-01) + d5fa95e (08-02). Human UAT pending for 6 visual/behavioral checks.
+2026-05-05 — Phase 12 complete (Bug Fixes). 2/2 plans, 2 waves.
+
+- CR-01: critic.py double-guard fallback + try/except around acompletion.
+- CR-02: agent.py _to_responses_input emits "[no output]" for None tool content.
+- CR-03: ChatPage.tsx handleDeleteConversation wrapped in try/catch.
+- WR-01: standard_messages reconstruction now includes developer-role and function_call_output items.
+- WR-02: llm.py build_conversation_history capped at 200 rows; orphaned tool messages dropped.
+- WR-03: loadConversation filter removed && m.content guard for assistant messages.
+- WR-04: Guest flag in mount effect guarded by !isSignedIn check.
+- WR-05: isLoading removed from MessageThreadProps and ChatPage call site.
+- WR-06: test_provider_for_known_models renamed to test_provider_for_exact_roster_match with comment.
+- IN-01: Critic prompt changed from "useful to a recruiter" → "useful to the user".
+- Backend: 94 passed, 0 failed. Frontend: 67 passed, 1 todo stub, 0 failures. TypeScript: clean.
+- Code review: 2 critical, 4 warning findings documented in 12-REVIEW.md (advisory).
+- Branch: v3-cleanup.
