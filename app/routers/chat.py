@@ -343,6 +343,7 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": f"Invalid API key for {provider}. Update your key in Settings."}),
             }
+            return
         except Exception as e:
             logger.error(f"Chat stream failed: {e}", exc_info=True)
             await db.rollback()
@@ -350,7 +351,6 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": "An unexpected error occurred. Please try again."}),
             }
-        finally:
-            await db.commit()
+            return
 
     return EventSourceResponse(event_generator(), sep="\n", ping=15)
