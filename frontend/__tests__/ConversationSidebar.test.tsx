@@ -59,7 +59,7 @@ describe("ConversationSidebar", () => {
   });
 
   it("calls onDeleteConversation when delete button is clicked", () => {
-    const { container } = render(<ConversationSidebar {...baseProps} hoveredConvId="conv-1" />);
+    const { container } = render(<ConversationSidebar {...baseProps} />);
     // The delete button is shown on hover — trigger hover then click
     const item = container.querySelector('[role="button"]') as HTMLElement;
     fireEvent.mouseEnter(item);

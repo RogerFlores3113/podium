@@ -509,7 +509,6 @@ export default function ChatPage() {
         onNewConversation={startNewConversation}
         onSelectConversation={loadConversation}
         onDeleteConversation={handleDeleteConversation}
-        // @ts-expect-error -- prop added by Plan 13-04
         onRenameConversation={handleRenameConversation}
       />
 
