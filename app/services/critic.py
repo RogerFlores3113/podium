@@ -39,6 +39,13 @@ async def _actor_critic(
     critique_model = model or settings.memory_extraction_model
     if critique_model in RESPONSES_API_MODELS:
         critique_model = settings.memory_extraction_model
+    # Second check: operator may have set memory_extraction_model to a Responses-API model
+    if critique_model in RESPONSES_API_MODELS:
+        logger.error(
+            "memory_extraction_model %s is a Responses-API model; critic disabled.",
+            critique_model,
+        )
+        return initial_answer
     critique_api_key = settings.openai_api_key  # always system key
 
     critique_messages = list(messages) + [
@@ -47,18 +54,22 @@ async def _actor_critic(
             "role": "user",
             "content": (
                 "Please review your answer above. Is it complete, accurate, "
-                "and directly useful to a recruiter? If yes, reply LGTM. "
+                "and directly useful to the user? If yes, reply LGTM. "
                 "If not, give a revised and improved answer."
             ),
         },
     ]
-    response = await acompletion(
-        model=critique_model,
-        messages=critique_messages,
-        api_key=critique_api_key,
-        max_tokens=1500,
-        stream=False,
-    )
+    try:
+        response = await acompletion(
+            model=critique_model,
+            messages=critique_messages,
+            api_key=critique_api_key,
+            max_tokens=1500,
+            stream=False,
+        )
+    except Exception as exc:
+        logger.warning("Actor-critic call failed (%s); returning original.", exc)
+        return initial_answer
     revised = response.choices[0].message.content or ""
     if revised.strip().upper().startswith("LGTM"):
         return initial_answer

@@ -70,10 +70,11 @@ def _to_responses_input(messages: list[dict]) -> list[dict]:
             if content:
                 result.append({"role": "assistant", "content": [{"type": "output_text", "text": content}]})
         elif role == "tool":
+            output = content or "[no output]"
             result.append({
                 "type": "function_call_output",
                 "call_id": msg.get("tool_call_id", ""),
-                "output": content,
+                "output": output,
             })
     return result
 
@@ -204,11 +205,19 @@ async def _run_responses_agent(
                 final_text = accumulated_text
                 if effort != "fast" and not is_guest:
                     # Convert Responses API input_messages to standard format for _actor_critic
-                    standard_messages = [
-                        {"role": m["role"], "content": m["content"][0]["text"]}
-                        for m in input_messages
-                        if isinstance(m.get("content"), list) and m.get("role") in ("user", "assistant")
-                    ]
+                    standard_messages = []
+                    for m in input_messages:
+                        role = m.get("role")
+                        content_list = m.get("content")
+                        if role == "developer":
+                            text = content_list[0]["text"] if isinstance(content_list, list) and content_list else ""
+                            standard_messages.append({"role": "system", "content": text})
+                        elif role in ("user", "assistant"):
+                            text = content_list[0]["text"] if isinstance(content_list, list) and content_list else ""
+                            standard_messages.append({"role": role, "content": text})
+                        elif m.get("type") == "function_call_output":
+                            output = m.get("output", "")
+                            standard_messages.append({"role": "tool", "content": output, "tool_call_id": m.get("call_id", "")})
                     final_text = await _actor_critic(
                         final_text, standard_messages, model
                     )

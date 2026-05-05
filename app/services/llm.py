@@ -33,6 +33,7 @@ async def build_conversation_history(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.desc())
+        .limit(200)
     )
     messages = result.scalars().all()
 
@@ -69,6 +70,24 @@ async def build_conversation_history(
             })
 
         token_count += msg_tokens
+
+    # Drop orphaned tool messages: a tool message is orphaned if no preceding
+    # assistant message with matching tool_call_id exists in the included history.
+    included_tool_call_ids: set[str] = set()
+    for h in history:
+        if h.get("role") == "assistant" and h.get("tool_calls"):
+            for tc in h["tool_calls"]:
+                call_id = tc.get("id") or tc.get("call_id") or ""
+                if call_id:
+                    included_tool_call_ids.add(call_id)
+
+    history = [
+        h for h in history
+        if not (
+            h.get("role") == "tool"
+            and h.get("tool_call_id") not in included_tool_call_ids
+        )
+    ]
 
     history.reverse()
 
