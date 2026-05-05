@@ -255,7 +255,7 @@ Plans:
 
 - [x] **Phase 11: Refactor & Test Audit** — Delete 4 implementation-detail test files, extract critic.py, split ChatPage.tsx into 4 focused components. (completed 2026-05-05)
 - [x] **Phase 12: Bug Fixes** — Fix CR-01 actor-critic fallback guard, CR-02 tool message handling, CR-03 handleDeleteConversation error handling, and other review findings. (completed 2026-05-05)
-- [ ] **Phase 13: Visual Polish & Deploy** — Final visual polish and production deployment.
+- [ ] **Phase 13: Visual Polish & Deploy** — Backend bug fixes, conversation rename, visual polish, and Clerk Production deploy.
 
 ## Phase Details (v3.0)
 
@@ -279,9 +279,17 @@ Plans:
 - [x] 12-02-PLAN.md — Frontend fixes: handleDeleteConversation try/catch, loadConversation guard, guest isSignedIn check, remove dead isLoading prop (Wave 2)
 
 ### Phase 13: Visual Polish & Deploy
-**Goal:** Final visual polish and production deployment.
-**Requirements:** TBD
-**Plans:** 0 plans (not started)
+**Goal:** Fix remaining review-flagged bugs (dangling tool_calls, guest tool set), add conversation rename, polish empty state copy and mobile layout, and ship to production with Clerk in Production mode.
+**Requirements:** POLISH-02, POLISH-03, POLISH-04, POLISH-05
+**Plans:** 6 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Backend bug fixes: D-01 dangling tool_calls (llm.py), D-02 python_executor for guests (agent.py) (Wave 1)
+- [ ] 13-02-PLAN.md — PATCH /conversations/{id} endpoint + ConversationUpdate schema (Wave 1, parallel)
+- [ ] 13-03-PLAN.md — ChatPage.tsx: D-03 dead guard removal, D-05 byokError reset, D-06 BYOK modal, D-07 rename callback (Wave 2)
+- [ ] 13-04-PLAN.md — ConversationSidebar: D-07 inline rename feature + D-11 ConversationSidebar tests (Wave 2, parallel)
+- [ ] 13-05-PLAN.md — Visual polish: D-08 empty state copy, POLISH-03 guest card filtering, D-09 mobile sidebar verify (Wave 3)
+- [ ] 13-06-PLAN.md — README "Why this stack" section + D-10 Clerk Production + POLISH-05 E2E verify (Wave 4)
 
 ## Progress (v3.0)
 
@@ -289,8 +297,8 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 11. Refactor & Test Audit | v3.0 | 3/3 | Complete | 2026-05-05 |
 | 12. Bug Fixes | v3.0 | 2/2 | Complete | 2026-05-05 |
-| 13. Visual Polish & Deploy | v3.0 | 0/TBD | Not started | — |
+| 13. Visual Polish & Deploy | v3.0 | 0/6 | Not started | — |
 
 ---
 *Roadmap defined: 2026-05-03 (v1.0) / 2026-05-04 (v2.0 phases added) / 2026-05-05 (v3.0 phases added)*
-*Last updated: 2026-05-05 — Phase 12 complete. 94 backend + 67 frontend tests passing. 10 bug-fix requirements verified.*
+*Last updated: 2026-05-05 — Phase 13 planned. 6 plans, 4 waves. POLISH-02/03/04/05 covered.*
