@@ -46,7 +46,9 @@ export default function ChatPage() {
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
   const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
+  const [showByokModal, setShowByokModal] = useState(false);
   const hasWelcomed = useRef(false);
+  const hasShownByokModal = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { isSignedIn, isLoaded } = useAuth();
@@ -145,23 +147,23 @@ export default function ChatPage() {
       } catch { /* sessionStorage unavailable */ }
       fetchConversations();
       // Phase 10 (OLL-01): fetch Ollama models now that Clerk has confirmed auth.
-      // Skip for guests — they do not have BYOK keys configured.
-      if (!isGuest) {
-        void (async () => {
-          try {
-            const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
-            if (ollamaRes.ok) {
-              const ollamaModels = await ollamaRes.json();
-              if (ollamaModels.length > 0) {
-                setAvailableModels((prev) => {
-                  const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
-                  return [...base, ...ollamaModels];
-                });
-              }
+      // D-03: removed the inner `if (!isGuest)` guard — isGuest may still be true in
+      // this closure because setIsGuest(false) is async. The outer `if (isSignedIn)`
+      // is the correct and sufficient guard.
+      void (async () => {
+        try {
+          const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+          if (ollamaRes.ok) {
+            const ollamaModels = await ollamaRes.json();
+            if (ollamaModels.length > 0) {
+              setAvailableModels((prev) => {
+                const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
+                return [...base, ...ollamaModels];
+              });
             }
-          } catch {}
-        })();
-      }
+          }
+        } catch {}
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, fetchConversations, authFetch]);
@@ -191,6 +193,22 @@ export default function ChatPage() {
     }
   };
 
+  const handleRenameConversation = async (id: string, newTitle: string) => {
+    try {
+      const res = await authFetch(`${API_URL}/chat/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (!res.ok) return;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      );
+    } catch {
+      // rename is non-critical — swallow errors silently
+    }
+  };
+
   const loadConversation = async (id: string) => {
     try {
       const res = await authFetch(`${API_URL}/chat/${id}`);
@@ -211,6 +229,9 @@ export default function ChatPage() {
   const submitMessage = async (userMessage: string) => {
     if (!userMessage.trim() || isLoading) return;
 
+    // D-05: clear stale 402 error state before each new send attempt
+    setByokError(false);
+
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
     setIsThinking(true);
@@ -230,7 +251,6 @@ export default function ChatPage() {
     }
 
     if (response.status === 402) {
-      setByokError(true);
       let copy = ERROR_COPY.byok;
       try {
         const body = await response.json();
@@ -238,6 +258,13 @@ export default function ChatPage() {
       } catch { /* use generic copy */ }
       setByokCopy(copy);
       setMessages((prev) => [...prev, { role: "error", kind: "byok", content: copy }]);
+      // D-06: show modal on the FIRST 402 per session; inline banner only for subsequent ones
+      if (!hasShownByokModal.current) {
+        hasShownByokModal.current = true;
+        setShowByokModal(true);
+      } else {
+        setByokError(true);
+      }
       setIsThinking(false);
       setIsLoading(false);
       return;
@@ -482,6 +509,8 @@ export default function ChatPage() {
         onNewConversation={startNewConversation}
         onSelectConversation={loadConversation}
         onDeleteConversation={handleDeleteConversation}
+        // @ts-expect-error -- prop added by Plan 13-04
+        onRenameConversation={handleRenameConversation}
       />
 
       {/* Main area */}
@@ -490,6 +519,43 @@ export default function ChatPage() {
           <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #f0f9ff)", color: "var(--text-secondary, #555)" }}>
             Guest session — your data will be deleted in 24 hours.{" "}
             <a href="/sign-up" className="underline font-medium">Sign up</a> to keep your work.
+          </div>
+        )}
+        {/* D-06: BYOK modal — first 402 per session shows this; subsequent 402s show the banner below */}
+        {showByokModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.4)" }}
+            onClick={() => setShowByokModal(false)}
+          >
+            <div
+              className="rounded-xl px-8 py-6 max-w-sm w-full"
+              style={{ background: "var(--bg-elevated)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+                Add your API key to continue
+              </h2>
+              <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+                Podium uses your own API key — nothing is stored on our servers after your messages are processed. Add a key in Settings to start chatting.
+              </p>
+              <div className="flex gap-3">
+                <a
+                  href="/settings"
+                  className="flex-1 text-center px-4 py-2 rounded-lg text-sm font-medium"
+                  style={{ background: "var(--accent-warm)", color: "#fff" }}
+                >
+                  Go to Settings
+                </a>
+                <button
+                  onClick={() => setShowByokModal(false)}
+                  className="px-4 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
           </div>
         )}
         {byokError && (
