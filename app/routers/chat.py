@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Conversation, Message, User
-from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
+from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse, ConversationUpdate
 from app.services.llm import build_conversation_history, get_user_api_key, normalize_ollama_url, resolve_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
@@ -120,6 +120,29 @@ async def delete_conversation(
     await db.delete(conversation)
     await db.commit()
     return {"detail": "Conversation deleted"}
+
+
+@router.patch("/{conversation_id}", response_model=ConversationListItemResponse)
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationUpdate,
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a conversation. Only the owning user can rename their own conversations."""
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.clerk_id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation.title = body.title
+    await db.commit()
+    await db.refresh(conversation)
+    return conversation
 
 
 @router.post("/stream")
