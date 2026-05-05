@@ -73,7 +73,8 @@ export default function ChatPage() {
       const guestToken = sessionStorage.getItem("podium_guest_token");
       const guestExpires = sessionStorage.getItem("podium_guest_expires");
       if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
-        setIsGuest(true);
+        // Only set guest if Clerk has not already confirmed sign-in (avoids stale flag during Clerk load)
+        if (!isSignedIn) setIsGuest(true);
       }
     } catch {
       // sessionStorage unavailable
@@ -180,10 +181,14 @@ export default function ChatPage() {
 
   const handleDeleteConversation = async (id: string) => {
     if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
-    const res = await authFetch(`${API_URL}/chat/${id}`, { method: "DELETE" });
-    if (!res.ok) return; // sidebar silent per D-05
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (conversationId === id) startNewConversation();
+    try {
+      const res = await authFetch(`${API_URL}/chat/${id}`, { method: "DELETE" });
+      if (!res.ok) return;
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (conversationId === id) startNewConversation();
+    } catch {
+      // sidebar is non-critical — swallow network errors silently
+    }
   };
 
   const loadConversation = async (id: string) => {
@@ -192,7 +197,7 @@ export default function ChatPage() {
       if (!res.ok) return;
       const data = await res.json();
       const msgs: Message[] = (data.messages as { role: string; content: string }[])
-        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+        .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
       setMessages(msgs.length > 0 ? msgs : [{ role: "assistant", content: WELCOME_MESSAGE }]);
       setConversationId(id);
