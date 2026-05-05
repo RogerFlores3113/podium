@@ -591,7 +591,6 @@ export default function ChatPage() {
           <MessageThread
             messages={messages}
             isThinking={isThinking}
-            isLoading={isLoading}
             showCapabilityCards={showCapabilityCards}
             onCardClick={handleCardClick}
           />
