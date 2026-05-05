@@ -3,38 +3,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { UserButton, useAuth } from "@clerk/nextjs";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
-import { formatRelativeTime } from "@/app/utils/time";
-import { ToolCallDisplay, type ToolCall } from "@/app/components/ToolCallDisplay";
+import { type ToolCall } from "@/app/components/ToolCallDisplay";
+import ConversationSidebar from "@/app/components/ConversationSidebar";
+import MessageThread from "@/app/components/MessageThread";
+import ChatComposer from "@/app/components/ChatComposer";
+import type { Message, ConversationItem } from "@/app/types/chat";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const DEFAULT_MODEL = "gpt-5-nano";
 const FALLBACK_MODELS = [{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }];
 
-const CAPABILITY_CARDS = [
-  { icon: "💬", label: "Ask anything", prompt: "What can you help me with?" },
-  { icon: "🔍", label: "Search the web", prompt: "Search the web for the latest news on AI" },
-  { icon: "📄", label: "Upload documents", prompt: "I'll upload a PDF — summarize it for me" },
-  { icon: "🐍", label: "Run code", prompt: "Write and run a Python script that prints the Fibonacci sequence" },
-  { icon: "🧠", label: "I'll remember this", prompt: "Remember that I prefer concise answers" },
-];
-
 const WELCOME_MESSAGE =
   "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
-
-// UX-02 audit passed: all entries ≤3 words (excluding trailing ellipsis)
-const TOOL_PHASE_COPY: Record<string, string> = {
-  web_search: "Searching the web…",
-  document_search: "Reading uploaded documents…",
-  url_reader: "Reading source…",
-  python_executor: "Running code…",
-  memory_search: "Recalling earlier conversations…",
-};
-const toolPhaseCopy = (name: string): string =>
-  TOOL_PHASE_COPY[name] ?? `Working on ${name}…`;
 
 type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
 
@@ -48,21 +30,9 @@ const ERROR_COPY: Record<ErrorKind, string> = {
 
 const MAX_POLL_ATTEMPTS = 60;
 
-interface UserMessage { role: "user"; content: string }
-interface AssistantMessage { role: "assistant"; content: string; toolCalls?: ToolCall[] }
-interface ErrorMessage { role: "error"; kind: ErrorKind; content: string }
-type Message = UserMessage | AssistantMessage | ErrorMessage;
-
-interface ConversationItem {
-  id: string;
-  title: string | null;
-  created_at: string;
-}
-
 export default function ChatPage() {
   const authFetch = useAuthFetch();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -76,9 +46,6 @@ export default function ChatPage() {
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
   const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
-  const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
-  const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -198,15 +165,10 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, fetchConversations, authFetch]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Clean up upload poll and hover timeout on unmount
+  // Clean up upload poll on unmount
   useEffect(() => {
     return () => {
       if (uploadPollRef.current) clearInterval(uploadPollRef.current);
-      if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
     };
   }, []);
 
@@ -241,15 +203,9 @@ export default function ChatPage() {
     }
   };
 
-  const handleCardClick = (prompt: string) => {
-    setInput(prompt);
-  };
+  const submitMessage = async (userMessage: string) => {
+    if (!userMessage.trim() || isLoading) return;
 
-  const submitMessage = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMessage = input.trim();
-    setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
     setIsThinking(true);
@@ -327,6 +283,7 @@ export default function ChatPage() {
               if (line.startsWith("event: ")) {
                 currentEvent = line.slice(7).trim();
               } else if (line.startsWith("data: ")) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let data: any;
                 try {
                   data = JSON.parse(line.slice(6));
@@ -442,9 +399,8 @@ export default function ChatPage() {
     setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    submitMessage();
+  const handleCardClick = (prompt: string) => {
+    submitMessage(prompt);
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -513,135 +469,15 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen" style={{ background: "var(--bg-base)" }}>
-      {/* Sidebar overlay on mobile */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-10 md:hidden"
-          style={{ background: "rgba(0,0,0,0.3)" }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed md:relative md:translate-x-0 z-20 md:z-auto flex-shrink-0 flex flex-col h-full transition-transform duration-200`}
-        style={{
-          width: "240px",
-          background: "var(--bg-elevated)",
-          borderRight: "1px solid var(--border)",
-        }}
-      >
-        {/* Sidebar header */}
-        <div
-          className="flex items-center justify-between px-4 py-4"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            Conversations
-          </span>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="md:hidden text-lg transition-opacity hover:opacity-70"
-            style={{ color: "var(--text-muted)" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* New conversation */}
-        <div className="px-3 py-2">
-          <button
-            onClick={startNewConversation}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-opacity hover:opacity-80"
-            style={{ background: "var(--accent-warm)", color: "#fff" }}
-          >
-            <span className="text-base font-light">+</span>
-            New conversation
-          </button>
-        </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto px-2 py-1">
-          {conversations.length === 0 ? (
-            <p className="text-xs px-2 py-3" style={{ color: "var(--text-muted)" }}>
-              No conversations yet
-            </p>
-          ) : (
-            conversations.map((conv) => (
-              <div
-                key={conv.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => loadConversation(conv.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    loadConversation(conv.id);
-                  }
-                }}
-                onMouseEnter={() => {
-                  if (hoverHideTimeoutRef.current) {
-                    clearTimeout(hoverHideTimeoutRef.current);
-                    hoverHideTimeoutRef.current = null;
-                  }
-                  setHoveredConvId(conv.id);
-                }}
-                onMouseLeave={() => {
-                  // Defer hide so mouseenter on the × button child can cancel it
-                  hoverHideTimeoutRef.current = setTimeout(
-                    () => setHoveredConvId(null),
-                    0
-                  );
-                }}
-                className="relative w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-opacity hover:opacity-80 cursor-pointer"
-                style={{
-                  background: conv.id === conversationId ? "var(--bg-surface)" : "transparent",
-                  border: conv.id === conversationId ? "1px solid var(--border)" : "1px solid transparent",
-                }}
-              >
-                <div
-                  className="text-sm truncate"
-                  style={{ color: "var(--text-primary)" }}
-                >
-                  {conv.title || "Untitled"}
-                </div>
-                <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  {formatRelativeTime(conv.created_at)}
-                </div>
-                {hoveredConvId === conv.id && (
-                  <button
-                    type="button"
-                    title="Delete conversation"
-                    onMouseEnter={() => {
-                      if (hoverHideTimeoutRef.current) {
-                        clearTimeout(hoverHideTimeoutRef.current);
-                        hoverHideTimeoutRef.current = null;
-                      }
-                      setHoveredConvId(conv.id);
-                    }}
-                    onMouseLeave={() => {
-                      hoverHideTimeoutRef.current = setTimeout(
-                        () => setHoveredConvId(null),
-                        0
-                      );
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteConversation(conv.id);
-                    }}
-                    className="absolute top-1/2 right-2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-base rounded-full transition-opacity hover:opacity-80"
-                    style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </aside>
+      <ConversationSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        conversations={conversations}
+        activeConversationId={conversationId}
+        onNewConversation={startNewConversation}
+        onSelectConversation={loadConversation}
+        onDeleteConversation={handleDeleteConversation}
+      />
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
@@ -747,180 +583,20 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-            {messages.map((msg, i) => (
-              <div key={i}>
-                {msg.role === "error" && (
-                  <div
-                    className="flex justify-start mb-2"
-                    data-testid="error-bubble"
-                    role="alert"
-                  >
-                    <div
-                      className="max-w-[80%] rounded-lg px-4 py-2 text-sm"
-                      style={{
-                        background: "#fef2f2",
-                        border: "1px solid #fecaca",
-                        color: "#b91c1c",
-                      }}
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
-                )}
+          <MessageThread
+            messages={messages}
+            isThinking={isThinking}
+            isLoading={isLoading}
+            showCapabilityCards={showCapabilityCards}
+            onCardClick={handleCardClick}
+          />
 
-                {msg.role !== "error" && msg.content && (
-                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-2`}>
-                    <div
-                      className="max-w-[80%] rounded-lg px-4 py-2"
-                      style={
-                        msg.role === "user"
-                          ? { background: "var(--accent-warm)", color: "#fff" }
-                          : { background: "var(--bg-surface)", color: "var(--text-primary)" }
-                      }
-                    >
-                      {msg.role === "assistant" ? (
-                        <div className="prose prose-sm max-w-none">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code: ({ className, children, ...props }) => {
-                                const isBlock = Boolean(className);
-                                if (isBlock) return <code className={className} {...props}>{children}</code>;
-                                return (
-                                  <code
-                                    style={{
-                                      fontFamily: "monospace",
-                                      background: "var(--bg-elevated)",
-                                      padding: "0.1em 0.35em",
-                                      borderRadius: "3px",
-                                      fontSize: "0.875em",
-                                    }}
-                                    {...props}
-                                  >
-                                    {children}
-                                  </code>
-                                );
-                              },
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="space-y-2 my-2">
-                    {msg.toolCalls.map((tc) => (
-                      <div key={tc.id}>
-                        {tc.status === "running" && (
-                          <div
-                            className="text-xs italic mb-1"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {toolPhaseCopy(tc.name)}
-                          </div>
-                        )}
-                        <ToolCallDisplay toolCall={tc} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isThinking && (
-              <div
-                className="flex justify-start mb-2"
-                data-testid="thinking-indicator"
-                role="status"
-                aria-label="Thinking"
-              >
-                <div
-                  className="rounded-lg px-4 py-2"
-                  style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}
-                >
-                  <span className="inline-flex gap-1">
-                    <span className="animate-pulse">·</span>
-                    <span className="animate-pulse" style={{ animationDelay: "150ms" }}>·</span>
-                    <span className="animate-pulse" style={{ animationDelay: "300ms" }}>·</span>
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Capability cards — shown only on fresh conversation */}
-            {showCapabilityCards && (
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                {CAPABILITY_CARDS.map((card) => (
-                  <button
-                    key={card.label}
-                    onClick={() => handleCardClick(card.prompt)}
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 text-left transition-opacity hover:opacity-80"
-                    style={{
-                      background: "var(--bg-surface)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    <span className="text-xl">{card.icon}</span>
-                    <span className="text-sm font-medium">{card.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                const el = e.target;
-                el.style.height = "auto";
-                el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  submitMessage();
-                }
-              }}
-              placeholder="Ask me anything…"
-              rows={1}
-              className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none resize-none"
-              style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "var(--text-primary)",
-                minHeight: "40px",
-                maxHeight: "144px",
-                overflowY: "auto",
-              }}
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: "var(--accent-warm)", color: "#fff" }}
-            >
-              {isLoading ? "…" : "Send"}
-            </button>
-          </form>
+          <ChatComposer
+            key={conversationId ?? "new"}
+            isLoading={isLoading}
+            isGuest={isGuest}
+            onSubmit={submitMessage}
+          />
         </main>
       </div>
     </div>
