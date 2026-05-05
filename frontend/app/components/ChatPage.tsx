@@ -145,23 +145,23 @@ export default function ChatPage() {
       } catch { /* sessionStorage unavailable */ }
       fetchConversations();
       // Phase 10 (OLL-01): fetch Ollama models now that Clerk has confirmed auth.
-      // Skip for guests — they do not have BYOK keys configured.
-      if (!isGuest) {
-        void (async () => {
-          try {
-            const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
-            if (ollamaRes.ok) {
-              const ollamaModels = await ollamaRes.json();
-              if (ollamaModels.length > 0) {
-                setAvailableModels((prev) => {
-                  const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
-                  return [...base, ...ollamaModels];
-                });
-              }
+      // D-03: removed the inner `if (!isGuest)` guard — isGuest may still be true in
+      // this closure because setIsGuest(false) is async. The outer `if (isSignedIn)`
+      // is the correct and sufficient guard.
+      void (async () => {
+        try {
+          const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+          if (ollamaRes.ok) {
+            const ollamaModels = await ollamaRes.json();
+            if (ollamaModels.length > 0) {
+              setAvailableModels((prev) => {
+                const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
+                return [...base, ...ollamaModels];
+              });
             }
-          } catch {}
-        })();
-      }
+          }
+        } catch {}
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, fetchConversations, authFetch]);
