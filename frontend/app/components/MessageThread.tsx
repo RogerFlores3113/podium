@@ -7,11 +7,31 @@ import { ToolCallDisplay } from "@/app/components/ToolCallDisplay";
 import type { Message } from "@/app/types/chat";
 
 const CAPABILITY_CARDS = [
-  { icon: "💬", label: "Ask anything", prompt: "What can you help me with?" },
-  { icon: "🔍", label: "Search the web", prompt: "Search the web for the latest news on AI" },
-  { icon: "📄", label: "Upload documents", prompt: "I'll upload a PDF — summarize it for me" },
-  { icon: "🐍", label: "Run code", prompt: "Write and run a Python script that prints the Fibonacci sequence" },
-  { icon: "🧠", label: "I'll remember this", prompt: "Remember that I prefer concise answers" },
+  {
+    icon: "🔍",
+    label: "Search the web",
+    prompt: "Search the web for recent developments in large language model benchmarks and summarize what you find",
+  },
+  {
+    icon: "🧠",
+    label: "Remember something",
+    prompt: "Remember that I prefer concise, bullet-pointed answers",
+  },
+  {
+    icon: "🐍",
+    label: "Run code",
+    prompt: "Write and run a Python script that calculates compound interest for a $10,000 investment at 7% over 10 years",
+  },
+  {
+    icon: "📄",
+    label: "Search my documents",
+    prompt: "What documents have I uploaded? Summarize the key points from the most recent one.",
+  },
+  {
+    icon: "🔗",
+    label: "Read a URL",
+    prompt: "Read https://openai.com/blog and summarize the three most recent announcements",
+  },
 ];
 
 // UX-02 audit passed: all entries ≤3 words (excluding trailing ellipsis)
@@ -31,6 +51,7 @@ interface MessageThreadProps {
   isThinking: boolean;
   showCapabilityCards: boolean;
   onCardClick: (prompt: string) => void;
+  isGuest?: boolean;
 }
 
 export default function MessageThread({
@@ -38,6 +59,7 @@ export default function MessageThread({
   isThinking,
   showCapabilityCards,
   onCardClick,
+  isGuest = false,
 }: MessageThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -156,7 +178,7 @@ export default function MessageThread({
       {/* Capability cards — shown only on fresh conversation */}
       {showCapabilityCards && (
         <div className="grid grid-cols-2 gap-2 mt-4">
-          {CAPABILITY_CARDS.map((card) => (
+          {CAPABILITY_CARDS.filter((card) => !(isGuest && card.label === "Remember something")).map((card) => (
             <button
               key={card.label}
               onClick={() => onCardClick(card.prompt)}
