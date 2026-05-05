@@ -89,6 +89,25 @@ async def build_conversation_history(
         )
     ]
 
+    # CR-01: Drop assistant messages whose tool_calls reference IDs with no matching
+    # tool result in the included history (prevents OpenAI API "must be followed by tool" error).
+    included_assistant_call_ids: set[str] = set()
+    for h in history:
+        if h.get("role") == "tool" and h.get("tool_call_id"):
+            included_assistant_call_ids.add(h["tool_call_id"])
+
+    history = [
+        h for h in history
+        if not (
+            h.get("role") == "assistant"
+            and h.get("tool_calls")
+            and not all(
+                (tc.get("id") or tc.get("call_id") or "") in included_assistant_call_ids
+                for tc in h["tool_calls"]
+            )
+        )
+    ]
+
     history.reverse()
 
     logger.info(
