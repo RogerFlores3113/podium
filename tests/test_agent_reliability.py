@@ -76,6 +76,17 @@ def test_system_prompt_uses_imperative_must():
     )
 
 
+def test_system_prompt_makes_no_persona_assumptions():
+    """AGENT_SYSTEM_PROMPT must not assume the user is a recruiter or any specific profession (GAP2)."""
+    from app.services.agent import AGENT_SYSTEM_PROMPT
+    prompt_lower = AGENT_SYSTEM_PROMPT.lower()
+    forbidden = ["recruiter", "talent acquisition", "candidate", "job description", "sourcing", "hiring"]
+    for word in forbidden:
+        assert word not in prompt_lower, (
+            f"AGENT_SYSTEM_PROMPT must not contain '{word}' — system prompt must be persona-neutral"
+        )
+
+
 # ---------------------------------------------------------------------------
 # QUAL-02: arq job deduplication via _job_id
 # ---------------------------------------------------------------------------

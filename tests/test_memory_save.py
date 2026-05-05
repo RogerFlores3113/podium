@@ -76,7 +76,7 @@ async def test_memory_save_normalizes_invalid_category_to_context():
 
 @pytest.mark.asyncio
 async def test_persist_memories_dedup_skips_duplicate_on_high_similarity():
-    """Saving the same memory twice skips the second insert when similarity >= 0.95 (GAP dedup)."""
+    """Saving the same memory twice skips the second insert when similarity >= 0.85 (GAP dedup)."""
     from app.services.memory import persist_memories
 
     unit_vector = [1.0] + [0.0] * 1535  # 1536-dim unit vector
@@ -108,7 +108,7 @@ async def test_persist_memories_dedup_skips_duplicate_on_high_similarity():
 
 @pytest.mark.asyncio
 async def test_persist_memories_dedup_inserts_when_low_similarity():
-    """Saving a semantically different memory still inserts when similarity < 0.95 (GAP dedup)."""
+    """Saving a semantically different memory still inserts when similarity < 0.85 (GAP dedup)."""
     from app.services.memory import persist_memories
 
     vector_a = [1.0] + [0.0] * 1535  # 1536-dim
