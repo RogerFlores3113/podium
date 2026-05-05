@@ -193,6 +193,22 @@ export default function ChatPage() {
     }
   };
 
+  const handleRenameConversation = async (id: string, newTitle: string) => {
+    try {
+      const res = await authFetch(`${API_URL}/chat/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (!res.ok) return;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      );
+    } catch {
+      // rename is non-critical — swallow errors silently
+    }
+  };
+
   const loadConversation = async (id: string) => {
     try {
       const res = await authFetch(`${API_URL}/chat/${id}`);
@@ -493,6 +509,8 @@ export default function ChatPage() {
         onNewConversation={startNewConversation}
         onSelectConversation={loadConversation}
         onDeleteConversation={handleDeleteConversation}
+        // @ts-expect-error -- prop added by Plan 13-04
+        onRenameConversation={handleRenameConversation}
       />
 
       {/* Main area */}
