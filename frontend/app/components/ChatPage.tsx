@@ -16,7 +16,7 @@ const DEFAULT_MODEL = "gpt-5-nano";
 const FALLBACK_MODELS = [{ id: "gpt-5-nano", label: "GPT-5 nano · fast" }];
 
 const WELCOME_MESSAGE =
-  "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
+  "Hi — I'm Podium. I can search the web and synthesize results, remember context across our conversations, run Python code in a sandbox, and search documents you upload. What are you working on?";
 
 type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
 
