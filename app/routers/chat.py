@@ -5,7 +5,7 @@ from sse_starlette.sse import EventSourceResponse
 
 import httpx
 import litellm
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -64,7 +64,7 @@ async def list_ollama_models(
 async def list_conversations(
     user: User = Depends(get_or_create_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
 ):
     """Return the most recent conversations for the current user."""
     result = await db.execute(
