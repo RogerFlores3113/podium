@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 class DocumentSearchTool(Tool):
     name = "document_search"
     description = (
-        "Search the user's personal document library for relevant content. "
-        "Use this when the user asks about topics that might be covered in "
-        "their uploaded documents. Returns the most relevant passages with "
-        "similarity scores."
+        "Search the user's uploaded document library — resumes, job descriptions, "
+        "offer letters, sourcing notes, and candidate profiles. Use this when the user "
+        "asks about a specific candidate, role, or document they have uploaded. "
+        "Returns the most relevant passages with similarity scores."
     )
     parameters = {
         "type": "object",
@@ -33,7 +33,7 @@ class DocumentSearchTool(Tool):
 
     async def execute(self, ctx: ToolContext, args: dict) -> str:
         query = args["query"]
-        top_k = args.get("top_k", 5)
+        top_k = max(1, min(10, args.get("top_k", 5)))
 
         logger.info(f"Document search: {query} (user={ctx.user_id})")
 

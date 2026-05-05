@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from litellm import acompletion
-from sqlalchemy import select
+from sqlalchemy import select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -92,15 +92,19 @@ async def extract_memories_from_conversation(
     except Exception as e:
         # response_format="json_object" requires specific prompt wording on some models
         logger.warning(f"JSON mode failed, retrying without: {e}")
-        response = await acompletion(
-            model=settings.memory_extraction_model,
-            messages=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
-                {"role": "user", "content": f"Conversation:\n\n{conversation_text}"},
-            ],
-            api_key=settings.openai_api_key,
-            max_tokens=1000,
-        )
+        try:
+            response = await acompletion(
+                model=settings.memory_extraction_model,
+                messages=[
+                    {"role": "system", "content": EXTRACTION_PROMPT},
+                    {"role": "user", "content": f"Conversation:\n\n{conversation_text}"},
+                ],
+                api_key=settings.openai_api_key,
+                max_tokens=1000,
+            )
+        except Exception as retry_err:
+            logger.error("Memory extraction retry also failed: %s", retry_err, exc_info=True)
+            return []
 
     content = response.choices[0].message.content.strip()
     logger.info(f"Memory extraction response ({len(content)} chars): {content[:200]}")
@@ -144,7 +148,7 @@ async def extract_memories_from_conversation(
 async def persist_memories(
     db: AsyncSession,
     user_id: str,
-    conversation_id: uuid.UUID,
+    conversation_id: uuid.UUID | None,
     memories: list[dict],
 ) -> int:
     """
@@ -159,6 +163,30 @@ async def persist_memories(
 
     count = 0
     for mem_data, embedding in zip(memories, embeddings):
+        dup_result = await db.execute(
+            sa_text("""
+                SELECT 1 - (embedding <=> :embedding) AS similarity
+                FROM memories
+                WHERE user_id = :user_id
+                  AND category = :category
+                  AND is_active = true
+                ORDER BY embedding <=> :embedding
+                LIMIT 1
+            """),
+            {
+                "embedding": str(embedding),
+                "user_id": user_id,
+                "category": mem_data["category"],
+            },
+        )
+        dup_row = dup_result.fetchone()
+        if dup_row and dup_row.similarity >= 0.85:
+            logger.info(
+                f"Skipping duplicate memory for user {user_id} "
+                f"(similarity={dup_row.similarity:.3f}): {mem_data['content'][:60]}"
+            )
+            continue
+
         memory = Memory(
             user_id=user_id,
             category=mem_data["category"],
@@ -169,7 +197,6 @@ async def persist_memories(
         db.add(memory)
         count += 1
 
-    await db.commit()
     logger.info(f"Persisted {count} memories for user {user_id}")
     return count
 
@@ -189,7 +216,7 @@ async def retrieve_core_memories(
         select(Memory)
         .where(
             Memory.user_id == user_id,
-            Memory.is_active == True,
+            Memory.is_active.is_(True),
             Memory.category.in_(["fact", "preference"]),
         )
         .order_by(Memory.updated_at.desc())
@@ -205,15 +232,13 @@ async def search_memories(
     top_k: int | None = None,
 ) -> list[dict]:
     """Semantic search over a user's memories. Used by the memory_search tool."""
-    from sqlalchemy import text
-
     top_k = top_k or settings.memory_retrieval_top_k
 
     embeddings = await generate_embeddings([query])
     query_embedding = embeddings[0]
 
     result = await db.execute(
-        text("""
+        sa_text("""
             SELECT id, category, content, 1 - (embedding <=> :embedding) AS similarity
             FROM memories
             WHERE user_id = :user_id

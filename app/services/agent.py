@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, model_supports_tools
+from app.services.llm import normalize_ollama_url
 from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
 
@@ -17,24 +18,23 @@ RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano", "gpt-5.4-nano"})
 logger = logging.getLogger(__name__)
 
 
-AGENT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools.
+AGENT_SYSTEM_PROMPT = """You are a capable AI assistant. You help with research, analysis, writing, coding, and general problem-solving. Treat the user as a logical, rational human being — make no assumptions about their profession, industry, or background.
 
 You have the following tools available:
-- document_search: Search the user's personal document library.
-- web_search: Search the web for current information.
-- url_reader: Fetch and read the full content of any URL.
-- python_executor: Execute Python code for calculations, data analysis, or plotting.
-- memory_search: Search the user's past memories (things they've told you before).
+- document_search: Search documents you have uploaded or shared.
+- web_search: Search the web for current information, facts, or anything that may have changed recently.
+- url_reader: Fetch and read the full content of any public URL.
+- python_executor: Execute Python code for data analysis, calculations, or processing structured data.
+- memory_search: Search what you have told me in past sessions — your preferences, context, and saved notes.
+- memory_save: Save a personal fact, preference, or ongoing context about you to long-term memory.
 
 Guidelines:
-- Use document_search when the user asks about topics that might be in their uploaded documents.
-- Use web_search when the user asks about current events or facts that might have changed recently.
-- Use url_reader when the user shares a link and wants you to read it, or when a web search result needs deeper reading.
-- Use python_executor for calculations, data manipulation, or anything that benefits from code.
-- Use memory_search when you need to recall specific past interactions or context the user mentioned previously.
-- You can call multiple tools in sequence.
-- If you don't need any tools, just answer directly from your knowledge.
-- Be concise and specific. Cite sources when you use them.
+- Use document_search when the user asks about something in their uploaded documents.
+- Use web_search when you need current information or anything that may have changed recently.
+- Use url_reader when the user shares a link or when a search result needs deeper reading before you can answer.
+- Use memory_search only when the user explicitly references something from a past session or asks about their saved preferences. Do not call it speculatively on every request.
+- Use memory_save when the user shares a personal fact, preference, or ongoing context that would be useful in future sessions (e.g., their name, preferred answer format, ongoing projects). Do NOT save temporary task context — things they just asked about or one-time lookups.
+- Multiple sequential tool calls are fine when gathering information from different sources.
 
 IMPORTANT — Tool synthesis rule:
 After EVERY tool call, you MUST write a complete response to the user that:
@@ -46,6 +46,7 @@ Never end your turn with only tool calls and no text — always follow tool resu
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
     {"document_search", "memory_search", "web_search", "url_reader"}
+    # python_executor and memory_save are absent — guests cannot execute code or save memories
 )
 
 
@@ -101,6 +102,7 @@ async def _run_responses_agent(
     api_key: str,
     model: str,
     is_guest: bool = False,
+    effort: str = "balanced",
 ) -> AsyncGenerator[dict, None]:
     """Agent loop using the OpenAI Responses API (for gpt-5-nano and similar)."""
     client = AsyncOpenAI(api_key=api_key)
@@ -110,11 +112,12 @@ async def _run_responses_agent(
         logger.info(f"Responses API iteration {iteration + 1}/{settings.agent_max_iterations}")
 
         try:
+            _effort_map = {"fast": "low", "balanced": "medium", "thorough": "high"}
             stream = await client.responses.create(
                 model=model,
                 input=input_messages,
                 tools=responses_tools,
-                reasoning={"effort": "medium", "summary": "auto"},
+                reasoning={"effort": _effort_map.get(effort, "medium"), "summary": "auto"},
                 include=["reasoning.encrypted_content"],
                 store=True,
                 stream=True,
@@ -181,8 +184,6 @@ async def _run_responses_agent(
             if pending_calls
             else None
         )
-        yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
-
         if not pending_calls:
             if not accumulated_text.strip():
                 if iteration == 0:
@@ -200,8 +201,24 @@ async def _run_responses_agent(
                         "content": "I wasn't able to generate a response. Please try again.",
                         "tool_calls": None,
                     }
+            else:
+                # Final answer — apply actor-critic self-critique pass if applicable (AGT-02, Pitfall 1)
+                final_text = accumulated_text
+                if effort != "fast" and not is_guest:
+                    # Convert Responses API input_messages to standard format for _actor_critic
+                    standard_messages = [
+                        {"role": m["role"], "content": m["content"][0]["text"]}
+                        for m in input_messages
+                        if isinstance(m.get("content"), list) and m.get("role") in ("user", "assistant")
+                    ]
+                    final_text = await _actor_critic(
+                        final_text, standard_messages, model
+                    )
+                yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
             return
+
+        yield {"type": "assistant_message", "content": accumulated_text, "tool_calls": tool_calls_list}
 
         # Build next-turn input: assistant text, reasoning items, then function_call items
         if accumulated_text:
@@ -256,6 +273,52 @@ async def _run_responses_agent(
     }
 
 
+async def _actor_critic(
+    initial_answer: str,
+    messages: list[dict],
+    model: str | None,
+) -> str:
+    """
+    Single self-critique pass (AGT-02, D-09-03).
+
+    Returns revised text if the model identifies improvements, or returns the
+    original text if the critique response starts with 'LGTM' (case-insensitive).
+
+    Always uses litellm acompletion regardless of the primary model path.
+    Always uses settings.openai_api_key (system key) — critique is a system-side
+    quality operation, not billed to the user's BYOK key (see RESEARCH.md Pitfall 5).
+    Falls back to settings.memory_extraction_model when the primary model is a
+    Responses API model (acompletion does not support Responses API format).
+    """
+    critique_model = model or settings.memory_extraction_model
+    if critique_model in RESPONSES_API_MODELS:
+        critique_model = settings.memory_extraction_model
+    critique_api_key = settings.openai_api_key  # always system key
+
+    critique_messages = list(messages) + [
+        {"role": "assistant", "content": initial_answer},
+        {
+            "role": "user",
+            "content": (
+                "Please review your answer above. Is it complete, accurate, "
+                "and directly useful to a recruiter? If yes, reply LGTM. "
+                "If not, give a revised and improved answer."
+            ),
+        },
+    ]
+    response = await acompletion(
+        model=critique_model,
+        messages=critique_messages,
+        api_key=critique_api_key,
+        max_tokens=1500,
+        stream=False,
+    )
+    revised = response.choices[0].message.content or ""
+    if revised.strip().upper().startswith("LGTM"):
+        return initial_answer
+    return revised.strip() or initial_answer
+
+
 async def run_agent(
     db: AsyncSession,
     user_id: str,
@@ -265,6 +328,7 @@ async def run_agent(
     core_memories_text: str | None = None,
     model: str | None = None,
     is_guest: bool = False,
+    effort: str = "balanced",  # "fast" skips critique; "balanced"/"thorough" trigger it (AGT-04)
 ) -> AsyncGenerator[dict, None]:
     """
     Run the agent loop for a single user message.
@@ -300,6 +364,16 @@ async def run_agent(
     if core_memories_text:
         system_prompt = f"{AGENT_SYSTEM_PROMPT}\n\n---\n\n{core_memories_text}"
 
+    if is_guest:
+        guest_addendum = (
+            "\n\n---\n\nGUEST MODE: memory_save is not available in guest sessions. "
+            "If the user asks you to remember something or save a preference, politely explain "
+            "that long-term memory saving is available to registered users and suggest they sign up. "
+            "Do not attempt to use memory_search speculatively — only use it if the user explicitly "
+            "references a past conversation."
+        )
+        system_prompt = system_prompt + guest_addendum
+
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
@@ -310,7 +384,9 @@ async def run_agent(
         if is_guest
         else all_schemas
     )
-    resolved_model = "gpt-5-nano" if is_guest else (model or settings.chat_model)
+    # Guests use gpt-5-nano by default; an explicit model override is respected
+    # so that callers (e.g. tests) can direct guests to a specific model.
+    resolved_model = (model or "gpt-5-nano") if is_guest else (model or settings.chat_model)
     resolved_api_key = api_key or settings.openai_api_key
 
     # Dispatch to the Responses API loop for models that require it
@@ -318,7 +394,7 @@ async def run_agent(
         input_messages = _to_responses_input(messages)
         responses_tools = _to_responses_tools(tool_schemas) if model_supports_tools(resolved_model) else []
         async for event in _run_responses_agent(
-            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model, is_guest
+            db, user_id, input_messages, responses_tools, resolved_api_key, resolved_model, is_guest, effort
         ):
             yield event
         return
@@ -336,8 +412,8 @@ async def run_agent(
                 messages=messages,
                 tools=tool_schemas if model_supports_tools(resolved_model) else None,
                 api_key="" if is_ollama else resolved_api_key,
-                api_base=resolved_api_key if is_ollama else None,
-                max_tokens=1500,
+                api_base=normalize_ollama_url(resolved_api_key) if is_ollama else None,
+                max_tokens=600 if effort == "fast" else 1500,
                 stream=True,
             )
         except Exception as e:
@@ -416,12 +492,14 @@ async def run_agent(
                 return
 
         if not accumulated_tool_calls:
-            # No tool calls → this is the final response. Persist and return.
-            yield {
-                "type": "assistant_message",
-                "content": accumulated_text,
-                "tool_calls": None,
-            }
+            # No tool calls → this is the final response.
+            final_text = accumulated_text
+            if effort != "fast" and not is_guest:
+                # Actor-critic self-critique pass (AGT-02, AGT-04, D-09-03)
+                final_text = await _actor_critic(
+                    final_text, messages, resolved_model
+                )
+            yield {"type": "assistant_message", "content": final_text, "tool_calls": None}
             yield {"type": "done"}
             return
 

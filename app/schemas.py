@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -22,6 +23,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: uuid.UUID | None = None
     model: str | None = None  # Override default chat_model for this request
+    effort: Literal["fast", "balanced", "thorough"] = "balanced"  # Effort level — gates actor-critic pass (AGT-04, D-09-04)
 
 
 class ChatResponse(BaseModel):

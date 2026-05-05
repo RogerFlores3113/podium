@@ -4,6 +4,7 @@ import logging
 from sse_starlette.sse import EventSourceResponse
 
 import httpx
+import litellm
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import Conversation, Message, User
 from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
-from app.services.llm import build_conversation_history, get_user_api_key, resolve_api_key
+from app.services.llm import build_conversation_history, get_user_api_key, normalize_ollama_url, resolve_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
 
@@ -38,7 +39,7 @@ async def list_ollama_models(
 ):
     """Return models available on the user's configured Ollama server."""
     user_ollama_url = await get_user_api_key(db, user.clerk_id, "ollama")
-    base_url = user_ollama_url or settings.ollama_base_url
+    base_url = normalize_ollama_url(user_ollama_url or settings.ollama_base_url)
     if not base_url:
         return []
     try:
@@ -143,8 +144,9 @@ async def chat_stream(
     """
     user_id = user.clerk_id
 
-    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models)
-    if body.model:
+    # Validate model before any DB work (MODEL-03: fail fast on disabled Ollama models).
+    # Skip validation for Ollama models — list_models() only returns non-Ollama models.
+    if body.model and not body.model.startswith("ollama/"):
         active_model_ids = {m["id"] for m in await list_models()}
         if body.model not in active_model_ids:
             raise HTTPException(status_code=422, detail="Model not available")
@@ -226,6 +228,7 @@ async def chat_stream(
                 core_memories_text=core_memories_text,
                 model=body.model or settings.chat_model,
                 is_guest=user.is_guest,
+                effort=body.effort,
             ):
                 event_type = agent_event["type"]
 
@@ -309,8 +312,17 @@ async def chat_stream(
                         "event": "error",
                         "data": json.dumps({"detail": agent_event["detail"]}),
                     }
+        except litellm.AuthenticationError:
+            provider = provider_for_model(body.model or "").title() or "provider"
+            logger.warning(f"BYOK authentication failed for model {body.model}")
+            await db.rollback()
+            yield {
+                "event": "error",
+                "data": json.dumps({"detail": f"Invalid API key for {provider}. Update your key in Settings."}),
+            }
         except Exception as e:
             logger.error(f"Chat stream failed: {e}", exc_info=True)
+            await db.rollback()
             yield {
                 "event": "error",
                 "data": json.dumps({"detail": str(e)}),

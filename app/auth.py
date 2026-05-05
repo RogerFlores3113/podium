@@ -43,6 +43,7 @@ def verify_clerk_token(token: str) -> dict:
             "verify_exp": True,
             "verify_aud": False,  # Clerk doesn't always set audience
         },
+        leeway=2.0,
     )
 
 

@@ -93,6 +93,7 @@ async def extract_memories_job(
 
             memories = await extract_memories_from_conversation(db, conv_uuid, user_id)
             saved = await persist_memories(db, user_id, conv_uuid, memories)
+            await db.commit()
             logger.info(
                 f"Memory extraction complete for {conversation_id}: {saved} memories saved"
             )

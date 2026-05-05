@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
@@ -20,12 +20,12 @@ const CAPABILITY_CARDS = [
   { icon: "📄", label: "Upload documents", prompt: "I'll upload a PDF — summarize it for me" },
   { icon: "🐍", label: "Run code", prompt: "Write and run a Python script that prints the Fibonacci sequence" },
   { icon: "🧠", label: "I'll remember this", prompt: "Remember that I prefer concise answers" },
-  { icon: "🎨", label: "Generate images", prompt: "Generate an image of a mountain at sunset" },
 ];
 
 const WELCOME_MESSAGE =
   "Hi — I'm Podium, your personal AI assistant. I can search the web, read documents you upload, run code, and remember things you tell me over time. What would you like to work on?";
 
+// UX-02 audit passed: all entries ≤3 words (excluding trailing ellipsis)
 const TOOL_PHASE_COPY: Record<string, string> = {
   web_search: "Searching the web…",
   document_search: "Reading uploaded documents…",
@@ -39,7 +39,7 @@ const toolPhaseCopy = (name: string): string =>
 type ErrorKind = "byok" | "limit" | "server" | "stream" | "network";
 
 const ERROR_COPY: Record<ErrorKind, string> = {
-  byok: "Add your OpenAI API key in Settings to chat. Or sign out and try Podium as a guest.",
+  byok: "Add your API key in Settings to chat. Or sign out and try Podium as a guest.",
   limit: "You've reached the guest message limit. Sign up to keep chatting.",
   server: "Something went wrong on our end. Please try again in a moment.",
   stream: "", // SSE error fills from data.detail
@@ -71,14 +71,18 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [selectedEffort, setSelectedEffort] = useState<"fast" | "balanced" | "thorough">("balanced");
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [isGuest, setIsGuest] = useState(false);
   const [byokError, setByokError] = useState(false);
+  const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasWelcomed = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { isSignedIn, isLoaded } = useAuth();
 
   useEffect(() => {
     try {
@@ -89,6 +93,11 @@ export default function ChatPage() {
       }
       const storedModel = localStorage.getItem("selectedModel");
       if (storedModel) setSelectedModel(storedModel);
+      // Phase 10: read persisted effort level
+      const storedEffort = localStorage.getItem("selectedEffort");
+      if (storedEffort === "fast" || storedEffort === "balanced" || storedEffort === "thorough") {
+        setSelectedEffort(storedEffort);
+      }
     } catch {
       // private browsing
     }
@@ -102,22 +111,15 @@ export default function ChatPage() {
     } catch {
       // sessionStorage unavailable
     }
-    // Fetch available models from backend (base list + dynamic Ollama models)
+    // Fetch available base models (unauthenticated). Ollama models are fetched in the
+    // isSignedIn effect — authFetch requires Clerk to have hydrated first.
     void (async () => { try {
       const res = await fetch(`${API_URL}/chat/models`);
       if (!res.ok) return;
       const baseModels = await res.json();
-      let allModels = baseModels;
-      try {
-        const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
-        if (ollamaRes.ok) {
-          const ollamaModels = await ollamaRes.json();
-          if (ollamaModels.length > 0) allModels = [...baseModels, ...ollamaModels];
-        }
-      } catch {}
-      setAvailableModels(allModels);
+      setAvailableModels(baseModels);
       const stored = localStorage.getItem("selectedModel");
-      if (stored && allModels.some((m: { id: string }) => m.id === stored)) {
+      if (stored && baseModels.some((m: { id: string }) => m.id === stored)) {
         setSelectedModel(stored);
       } else if (stored) {
         setSelectedModel(DEFAULT_MODEL);
@@ -161,8 +163,40 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    if (isLoaded) fetchConversations();
+  }, [isLoaded, fetchConversations]);
+
+  // Reactive guest cleanup: when Clerk confirms sign-in, clear guest state and
+  // reload conversation list so sidebar populates without a page refresh.
+  useEffect(() => {
+    if (isSignedIn) {
+      setIsGuest(false);
+      try {
+        sessionStorage.removeItem("podium_guest_token");
+        sessionStorage.removeItem("podium_guest_expires");
+      } catch { /* sessionStorage unavailable */ }
+      fetchConversations();
+      // Phase 10 (OLL-01): fetch Ollama models now that Clerk has confirmed auth.
+      // Skip for guests — they do not have BYOK keys configured.
+      if (!isGuest) {
+        void (async () => {
+          try {
+            const ollamaRes = await authFetch(`${API_URL}/chat/ollama-models`);
+            if (ollamaRes.ok) {
+              const ollamaModels = await ollamaRes.json();
+              if (ollamaModels.length > 0) {
+                setAvailableModels((prev) => {
+                  const base = prev.filter((m: { id: string }) => !m.id.startsWith("ollama/"));
+                  return [...base, ...ollamaModels];
+                });
+              }
+            }
+          } catch {}
+        })();
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn, fetchConversations, authFetch]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -225,7 +259,7 @@ export default function ChatPage() {
       response = await authFetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel }),
+        body: JSON.stringify({ message: userMessage, conversation_id: conversationId, model: selectedModel, effort: selectedEffort }),
       });
     } catch {
       setMessages((prev) => [...prev, { role: "error", kind: "network", content: ERROR_COPY.network }]);
@@ -241,6 +275,7 @@ export default function ChatPage() {
         const body = await response.json();
         if (body?.detail?.message) copy = body.detail.message;
       } catch { /* use generic copy */ }
+      setByokCopy(copy);
       setMessages((prev) => [...prev, { role: "error", kind: "byok", content: copy }]);
       setIsThinking(false);
       setIsLoading(false);
@@ -350,6 +385,7 @@ export default function ChatPage() {
                     }
                     return updated;
                   });
+                  setIsThinking(true);
                   setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                 } else if (currentEvent === "tool_call_error") {
                   setMessages((prev) => {
@@ -595,8 +631,8 @@ export default function ChatPage() {
                       e.stopPropagation();
                       handleDeleteConversation(conv.id);
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-sm transition-opacity hover:opacity-70"
-                    style={{ color: "#b91c1c" }}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-base rounded-full transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
                   >
                     ×
                   </button>
@@ -617,7 +653,7 @@ export default function ChatPage() {
         )}
         {byokError && (
           <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #fff8e1)", color: "var(--text-secondary, #555)" }}>
-            Add your OpenAI API key to start chatting.{" "}
+            {byokCopy}{" "}
             <a href="/settings" className="underline font-medium">Settings →</a>
           </div>
         )}
@@ -630,7 +666,7 @@ export default function ChatPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="w-7 h-7 flex items-center justify-center rounded text-sm transition-opacity hover:opacity-70"
+                className="md:hidden w-7 h-7 flex items-center justify-center rounded text-sm transition-opacity hover:opacity-70"
                 style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
                 title="Toggle sidebar"
               >
@@ -658,6 +694,26 @@ export default function ChatPage() {
                 {availableModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
+              </select>
+              <select
+                value={selectedEffort}
+                onChange={(e) => {
+                  setSelectedEffort(e.target.value as "fast" | "balanced" | "thorough");
+                  try { localStorage.setItem("selectedEffort", e.target.value); } catch {}
+                }}
+                disabled={isLoading || isGuest}
+                aria-label={isGuest ? "Effort selection unavailable for guest accounts" : "Select effort level"}
+                title={isGuest ? "Effort selection unavailable for guest accounts" : undefined}
+                className="text-xs rounded px-2 py-1 focus:outline-none transition-opacity disabled:opacity-50"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <option value="fast">Fast</option>
+                <option value="balanced">Balanced</option>
+                <option value="thorough">Thorough</option>
               </select>
             </div>
             <div className="flex items-center gap-3">
@@ -726,7 +782,29 @@ export default function ChatPage() {
                     >
                       {msg.role === "assistant" ? (
                         <div className="prose prose-sm max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code: ({ className, children, ...props }) => {
+                                const isBlock = Boolean(className);
+                                if (isBlock) return <code className={className} {...props}>{children}</code>;
+                                return (
+                                  <code
+                                    style={{
+                                      fontFamily: "monospace",
+                                      background: "var(--bg-elevated)",
+                                      padding: "0.1em 0.35em",
+                                      borderRadius: "3px",
+                                      fontSize: "0.875em",
+                                    }}
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          >
                             {msg.content}
                           </ReactMarkdown>
                         </div>
