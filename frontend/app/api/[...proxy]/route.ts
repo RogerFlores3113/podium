@@ -43,3 +43,45 @@ export async function GET(
     headers: response.headers,
   });
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ proxy: string[] }> }
+) {
+  const { proxy } = await params;
+  const path = proxy.join("/");
+
+  const response = await fetch(`${BACKEND_URL}/${path}`, {
+    method: "DELETE",
+    headers: request.headers,
+  });
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: response.headers,
+  });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ proxy: string[] }> }
+) {
+  const { proxy } = await params;
+  const path = proxy.join("/");
+  const contentType = request.headers.get("content-type") || "";
+
+  const body = contentType.includes("multipart")
+    ? await request.blob()
+    : await request.text();
+
+  const response = await fetch(`${BACKEND_URL}/${path}`, {
+    method: "PATCH",
+    headers: request.headers,
+    body: body as BodyInit,
+  });
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: response.headers,
+  });
+}
