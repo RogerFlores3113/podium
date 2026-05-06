@@ -2,6 +2,14 @@ import { NextRequest } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
+function forwardHeaders(request: NextRequest): Headers {
+  const headers = new Headers(request.headers);
+  // Strip the incoming host header so the backend sees its own hostname,
+  // not the public Next.js hostname.
+  headers.delete("host");
+  return headers;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ proxy: string[] }> }
@@ -16,7 +24,7 @@ export async function POST(
 
   const response = await fetch(`${BACKEND_URL}/${path}`, {
     method: "POST",
-    headers: request.headers,
+    headers: forwardHeaders(request),
     body: body as BodyInit,
   });
 
@@ -32,10 +40,11 @@ export async function GET(
 ) {
   const { proxy } = await params;
   const path = proxy.join("/");
+  const search = request.nextUrl.search;
 
-  const response = await fetch(`${BACKEND_URL}/${path}`, {
+  const response = await fetch(`${BACKEND_URL}/${path}${search}`, {
     method: "GET",
-    headers: request.headers,
+    headers: forwardHeaders(request),
   });
 
   return new Response(response.body, {
@@ -50,10 +59,11 @@ export async function DELETE(
 ) {
   const { proxy } = await params;
   const path = proxy.join("/");
+  const search = request.nextUrl.search;
 
-  const response = await fetch(`${BACKEND_URL}/${path}`, {
+  const response = await fetch(`${BACKEND_URL}/${path}${search}`, {
     method: "DELETE",
-    headers: request.headers,
+    headers: forwardHeaders(request),
   });
 
   return new Response(response.body, {
@@ -76,7 +86,7 @@ export async function PATCH(
 
   const response = await fetch(`${BACKEND_URL}/${path}`, {
     method: "PATCH",
-    headers: request.headers,
+    headers: forwardHeaders(request),
     body: body as BodyInit,
   });
 
