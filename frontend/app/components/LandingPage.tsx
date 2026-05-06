@@ -61,7 +61,7 @@ export default function LandingPage() {
           Podium.
         </h1>
         <p className="text-2xl font-medium mb-3" style={{ color: "var(--text-primary)" }}>
-          Your personal AI, built the right way.
+          Your personal AI platform.
         </p>
         <p className="text-lg mb-10" style={{ color: "var(--text-muted)" }}>
           Memory-first. Document-aware. Runs on your models.

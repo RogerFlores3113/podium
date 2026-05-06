@@ -31,6 +31,18 @@ export default function SettingsPage() {
   const router = useRouter();
   const [guestToast, setGuestToast] = useState(false);
 
+  // Apply saved theme so Settings respects dark mode like ChatPage does
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      } else {
+        document.documentElement.setAttribute("data-theme", "");
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!isLoaded) return;
     try {
@@ -38,12 +50,11 @@ export default function SettingsPage() {
       const guestExpires = sessionStorage.getItem("podium_guest_expires");
       if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
         setGuestToast(true);
-        setTimeout(() => router.replace("/"), 2000);
       }
     } catch {
       // sessionStorage unavailable (SSR or private browsing) — ignore
     }
-  }, [isLoaded, router]);
+  }, [isLoaded]);
 
   // API keys state
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -203,20 +214,34 @@ export default function SettingsPage() {
     setEditContent(memory.content);
   };
 
-  return (
-    <main className="max-w-3xl mx-auto p-8">
-      {guestToast && (
+  if (guestToast) {
+    return (
+      <main
+        className="min-h-screen flex items-start justify-center pt-24"
+        style={{ background: "var(--bg-base)" }}
+      >
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg text-sm z-50"
+          className="px-8 py-6 rounded-xl text-sm text-center max-w-sm"
           style={{
             background: "var(--bg-elevated)",
             color: "var(--text-primary)",
             border: "1px solid var(--border)",
           }}
         >
-          Settings require an account. Sign up to save preferences.
+          <p className="font-medium mb-1">Settings require an account.</p>
+          <p style={{ color: "var(--text-muted)" }}>
+            Sign up to save preferences and API keys.{" "}
+            <a href="/" style={{ color: "var(--accent-warm)" }}>
+              Go back
+            </a>
+          </p>
         </div>
-      )}
+      </main>
+    );
+  }
+
+  return (
+    <main className="max-w-3xl mx-auto p-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
           Settings

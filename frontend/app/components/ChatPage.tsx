@@ -577,7 +577,7 @@ export default function ChatPage() {
                 Add your API key to continue
               </h2>
               <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-                Podium uses your own API key — nothing is stored on our servers after your messages are processed. Add a key in Settings to start chatting.
+                Podium uses your own API key to chat. Your conversations and memories are saved to your account. Add a key in Settings to start chatting.
               </p>
               <div className="flex gap-3">
                 <a
