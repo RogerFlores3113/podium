@@ -59,6 +59,9 @@ def _to_responses_input(messages: list[dict]) -> list[dict]:
         elif role == "user":
             result.append({"role": "user", "content": [{"type": "input_text", "text": content}]})
         elif role == "assistant":
+            # Emit text first, then function_call items (matches Responses API production order)
+            if content:
+                result.append({"role": "assistant", "content": [{"type": "output_text", "text": content}]})
             if msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
                     result.append({
@@ -67,8 +70,6 @@ def _to_responses_input(messages: list[dict]) -> list[dict]:
                         "name": tc["function"]["name"],
                         "arguments": tc["function"]["arguments"],
                     })
-            if content:
-                result.append({"role": "assistant", "content": [{"type": "output_text", "text": content}]})
         elif role == "tool":
             output = content or "[no output]"
             result.append({
