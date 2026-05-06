@@ -409,6 +409,15 @@ export default function ChatPage() {
                   });
                   setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                 } else if (currentEvent === "done") {
+                  // Pop any trailing empty assistant placeholder before finishing
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last && last.role === "assistant" && !last.content && (!last.toolCalls || last.toolCalls.length === 0)) {
+                      updated.pop();
+                    }
+                    return updated;
+                  });
                   // Refresh sidebar after new conversation completes
                   fetchConversations();
                 } else if (currentEvent === "error") {
