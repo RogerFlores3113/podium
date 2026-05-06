@@ -149,12 +149,14 @@ export default function SettingsPage() {
   };
 
   const handleDeleteMemory = async (memoryId: string) => {
-    setMemories((prev) => prev.filter((m) => m.id !== memoryId));
+    if (!confirm("Delete this memory?")) return;
     const res = await authFetch(`${API_URL}/memories/${memoryId}`, {
       method: "DELETE",
     });
-    if (!res.ok) {
-      await loadMemories();
+    if (res.ok) {
+      setMemories((prev) => prev.filter((m) => m.id !== memoryId));
+      showMemoryStatus("Memory deleted");
+    } else {
       showMemoryStatus("Failed to delete memory");
     }
   };
