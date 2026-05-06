@@ -131,7 +131,7 @@ export default function LandingPage() {
         style={{ borderTop: "1px solid var(--border)", color: "var(--text-muted)" }}
       >
         <a
-          href="https://github.com/RogerFlores3113/podium"
+          href="https://github.com/RogerFlores3113"
           target="_blank"
           rel="noopener noreferrer"
           className="transition-opacity hover:opacity-70"
