@@ -1,18 +1,19 @@
 import uuid
 import json
 import logging
+import re as _re
 from sse_starlette.sse import EventSourceResponse
 
 import httpx
 import litellm
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Conversation, Message, User
-from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse
+from app.schemas import ChatRequest, ConversationResponse, ConversationListItemResponse, ConversationUpdate
 from app.services.llm import build_conversation_history, get_user_api_key, normalize_ollama_url, resolve_api_key
 from app.services.agent import run_agent
 from app.services.memory import retrieve_core_memories, format_core_memories_for_prompt
@@ -22,6 +23,17 @@ from app.limiter import limiter
 from app.auth import get_or_create_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _generate_title(message: str) -> str:
+    text = _re.sub(r"https?://\S+", "", message)
+    text = " ".join(text.split())
+    if not text:
+        return message[:60]
+    if len(text) <= 60:
+        return text
+    truncated = text[:60].rsplit(" ", 1)[0]
+    return (truncated or text[:60]) + "…"
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +76,7 @@ async def list_ollama_models(
 async def list_conversations(
     user: User = Depends(get_or_create_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
 ):
     """Return the most recent conversations for the current user."""
     result = await db.execute(
@@ -120,6 +132,29 @@ async def delete_conversation(
     await db.delete(conversation)
     await db.commit()
     return {"detail": "Conversation deleted"}
+
+
+@router.patch("/{conversation_id}", response_model=ConversationListItemResponse)
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationUpdate,
+    user: User = Depends(get_or_create_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a conversation. Only the owning user can rename their own conversations."""
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.clerk_id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation.title = body.title
+    await db.commit()
+    await db.refresh(conversation)
+    return conversation
 
 
 @router.post("/stream")
@@ -182,7 +217,7 @@ async def chat_stream(
     else:
         conversation = Conversation(
             user_id=user_id,
-            title=body.message[:100],
+            title=_generate_title(body.message),
         )
         db.add(conversation)
         await db.flush()
@@ -320,14 +355,14 @@ async def chat_stream(
                 "event": "error",
                 "data": json.dumps({"detail": f"Invalid API key for {provider}. Update your key in Settings."}),
             }
+            return
         except Exception as e:
             logger.error(f"Chat stream failed: {e}", exc_info=True)
             await db.rollback()
             yield {
                 "event": "error",
-                "data": json.dumps({"detail": str(e)}),
+                "data": json.dumps({"detail": "An unexpected error occurred. Please try again."}),
             }
-        finally:
-            await db.commit()
+            return
 
     return EventSourceResponse(event_generator(), sep="\n", ping=15)

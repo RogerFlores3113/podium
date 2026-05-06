@@ -8,12 +8,10 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, model_supports_tools
+from app.services.critic import _actor_critic, RESPONSES_API_MODELS
 from app.services.llm import normalize_ollama_url
 from app.tools import get_tool, get_tool_schemas
 from app.tools.base import ToolContext
-
-# Models that use the OpenAI Responses API instead of Chat Completions.
-RESPONSES_API_MODELS: frozenset[str] = frozenset({"gpt-5-nano", "gpt-5.4-nano"})
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +43,8 @@ Never end your turn with only tool calls and no text — always follow tool resu
 """
 
 GUEST_ALLOWED_TOOLS: frozenset[str] = frozenset(
-    {"document_search", "memory_search", "web_search", "url_reader"}
-    # python_executor and memory_save are absent — guests cannot execute code or save memories
+    {"document_search", "memory_search", "web_search", "url_reader", "python_executor"}
+    # memory_save excluded — guests cannot persist memories
 )
 
 
@@ -72,10 +70,11 @@ def _to_responses_input(messages: list[dict]) -> list[dict]:
             if content:
                 result.append({"role": "assistant", "content": [{"type": "output_text", "text": content}]})
         elif role == "tool":
+            output = content or "[no output]"
             result.append({
                 "type": "function_call_output",
                 "call_id": msg.get("tool_call_id", ""),
-                "output": content,
+                "output": output,
             })
     return result
 
@@ -124,7 +123,7 @@ async def _run_responses_agent(
             )
         except Exception as e:
             logger.error(f"Responses API call failed: {e}", exc_info=True)
-            yield {"type": "error", "detail": f"LLM error: {str(e)}"}
+            yield {"type": "error", "detail": "An unexpected error occurred. Please try again."}
             return
 
         accumulated_text = ""
@@ -206,11 +205,19 @@ async def _run_responses_agent(
                 final_text = accumulated_text
                 if effort != "fast" and not is_guest:
                     # Convert Responses API input_messages to standard format for _actor_critic
-                    standard_messages = [
-                        {"role": m["role"], "content": m["content"][0]["text"]}
-                        for m in input_messages
-                        if isinstance(m.get("content"), list) and m.get("role") in ("user", "assistant")
-                    ]
+                    standard_messages = []
+                    for m in input_messages:
+                        role = m.get("role")
+                        content_list = m.get("content")
+                        if role == "developer":
+                            text = content_list[0]["text"] if isinstance(content_list, list) and content_list else ""
+                            standard_messages.append({"role": "system", "content": text})
+                        elif role in ("user", "assistant"):
+                            text = content_list[0]["text"] if isinstance(content_list, list) and content_list else ""
+                            standard_messages.append({"role": role, "content": text})
+                        elif m.get("type") == "function_call_output":
+                            output = m.get("output", "")
+                            standard_messages.append({"role": "tool", "content": output, "tool_call_id": m.get("call_id", "")})
                     final_text = await _actor_critic(
                         final_text, standard_messages, model
                     )
@@ -271,52 +278,6 @@ async def _run_responses_agent(
         "type": "error",
         "detail": f"Agent exceeded {settings.agent_max_iterations} iterations.",
     }
-
-
-async def _actor_critic(
-    initial_answer: str,
-    messages: list[dict],
-    model: str | None,
-) -> str:
-    """
-    Single self-critique pass (AGT-02, D-09-03).
-
-    Returns revised text if the model identifies improvements, or returns the
-    original text if the critique response starts with 'LGTM' (case-insensitive).
-
-    Always uses litellm acompletion regardless of the primary model path.
-    Always uses settings.openai_api_key (system key) — critique is a system-side
-    quality operation, not billed to the user's BYOK key (see RESEARCH.md Pitfall 5).
-    Falls back to settings.memory_extraction_model when the primary model is a
-    Responses API model (acompletion does not support Responses API format).
-    """
-    critique_model = model or settings.memory_extraction_model
-    if critique_model in RESPONSES_API_MODELS:
-        critique_model = settings.memory_extraction_model
-    critique_api_key = settings.openai_api_key  # always system key
-
-    critique_messages = list(messages) + [
-        {"role": "assistant", "content": initial_answer},
-        {
-            "role": "user",
-            "content": (
-                "Please review your answer above. Is it complete, accurate, "
-                "and directly useful to a recruiter? If yes, reply LGTM. "
-                "If not, give a revised and improved answer."
-            ),
-        },
-    ]
-    response = await acompletion(
-        model=critique_model,
-        messages=critique_messages,
-        api_key=critique_api_key,
-        max_tokens=1500,
-        stream=False,
-    )
-    revised = response.choices[0].message.content or ""
-    if revised.strip().upper().startswith("LGTM"):
-        return initial_answer
-    return revised.strip() or initial_answer
 
 
 async def run_agent(
@@ -418,7 +379,7 @@ async def run_agent(
             )
         except Exception as e:
             logger.error(f"LLM call failed: {e}", exc_info=True)
-            yield {"type": "error", "detail": f"LLM error: {str(e)}"}
+            yield {"type": "error", "detail": "An unexpected error occurred. Please try again."}
             return
 
         # Accumulators for this iteration

@@ -3,7 +3,6 @@ import logging
 import os
 from urllib.parse import urlparse, urlunparse
 
-from litellm import acompletion
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,12 +17,6 @@ from app.services.encryption import (
 )
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT = """You are a helpful AI assistant with access to the user's personal knowledge base.
-Use the provided context to answer the user's question accurately.
-If the context doesn't contain relevant information, say so honestly — don't make things up.
-When referencing information from the context, be specific about what you found."""
-
 
 async def build_conversation_history(
     db: AsyncSession,
@@ -40,6 +33,7 @@ async def build_conversation_history(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.desc())
+        .limit(200)
     )
     messages = result.scalars().all()
 
@@ -77,33 +71,58 @@ async def build_conversation_history(
 
         token_count += msg_tokens
 
+    # Drop orphaned tool messages: a tool message is orphaned if no preceding
+    # assistant message with matching tool_call_id exists in the included history.
+    included_tool_call_ids: set[str] = set()
+    for h in history:
+        if h.get("role") == "assistant" and h.get("tool_calls"):
+            for tc in h["tool_calls"]:
+                call_id = tc.get("id") or tc.get("call_id") or ""
+                if call_id:
+                    included_tool_call_ids.add(call_id)
+
+    history = [
+        h for h in history
+        if not (
+            h.get("role") == "tool"
+            and h.get("tool_call_id") not in included_tool_call_ids
+        )
+    ]
+
+    # CR-01: Drop assistant messages whose tool_calls reference IDs with no matching
+    # tool result in the included history (prevents OpenAI API "must be followed by tool" error).
+    included_assistant_call_ids: set[str] = set()
+    for h in history:
+        if h.get("role") == "tool" and h.get("tool_call_id"):
+            included_assistant_call_ids.add(h["tool_call_id"])
+
+    history = [
+        h for h in history
+        if not (
+            h.get("role") == "assistant"
+            and h.get("tool_calls")
+            and not all(
+                (tc.get("id") or tc.get("call_id") or "") in included_assistant_call_ids
+                for tc in h["tool_calls"]
+            )
+        )
+    ]
+
     history.reverse()
 
+    # Recompute token count from the final history after orphan cleanup passes,
+    # since orphan removal may have dropped messages that were counted above.
+    actual_token_count = sum(
+        count_tokens(
+            (h.get("content") or "")
+            + (json.dumps(h["tool_calls"]) if h.get("tool_calls") else "")
+        )
+        for h in history
+    )
     logger.info(
-        f"Conversation history: {len(history)} messages, ~{token_count} tokens"
+        f"Conversation history: {len(history)} messages, ~{actual_token_count} tokens (after orphan cleanup)"
     )
     return history
-
-
-def build_context_string(chunks: list[dict], max_tokens: int) -> str:
-    """
-    Build a context string from retrieved chunks, fitting within a token budget.
-
-    Chunks are assumed to be pre-sorted by relevance (most relevant first).
-    """
-    parts = []
-    token_count = 0
-
-    for chunk in chunks:
-        chunk_str = f"[Relevance: {chunk['similarity']:.2f}]\n{chunk['content']}"
-        chunk_tokens = count_tokens(chunk_str)
-        if token_count + chunk_tokens > max_tokens:
-            break
-        parts.append(chunk_str)
-        token_count += chunk_tokens
-
-    logger.info(f"Context: {len(parts)}/{len(chunks)} chunks, ~{token_count} tokens")
-    return "\n\n---\n\n".join(parts)
 
 
 async def get_user_api_key(

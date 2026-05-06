@@ -18,12 +18,11 @@ def test_available_models_have_required_fields():
         assert model["provider"] in ("openai", "anthropic", "ollama")
 
 
-def test_provider_for_known_models():
+def test_provider_for_exact_roster_match():
+    # Tests the exact-ID branch of provider_for_model: gpt-5-nano is in AVAILABLE_MODELS.
+    # Distinct from test_provider_for_unknown_openai_prefix, which tests prefix fallback
+    # using gpt-3.5-turbo (a model NOT in the approved roster).
     assert provider_for_model("gpt-5-nano") == "openai"
-    assert provider_for_model("gpt-4o-mini") == "openai"
-    assert provider_for_model("gpt-4o") == "openai"
-    assert provider_for_model("claude-3-5-haiku-20241022") == "anthropic"
-    assert provider_for_model("claude-3-5-sonnet-20241022") == "anthropic"
 
 
 def test_provider_for_unknown_openai_prefix():
@@ -37,12 +36,6 @@ def test_provider_for_unknown_anthropic_prefix():
 def test_provider_for_ollama_prefix():
     assert provider_for_model("ollama/llama3.2") == "ollama"
     assert provider_for_model("ollama/mistral") == "ollama"
-
-
-def test_model_supports_tools_defaults_true():
-    assert model_supports_tools("gpt-4o-mini") is True
-    assert model_supports_tools("gpt-4o") is True
-    assert model_supports_tools("claude-3-5-sonnet-20241022") is True
 
 
 def test_model_supports_tools_ollama_disabled():

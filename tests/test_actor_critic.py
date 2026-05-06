@@ -48,8 +48,9 @@ async def test_effort_fast_skips_actor_critic():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.return_value = text_stream
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
 
         async for event in run_agent(
             db=db,
@@ -63,9 +64,12 @@ async def test_effort_fast_skips_actor_critic():
         ):
             events.append(event)
 
-    # With effort=fast: only ONE acompletion call (the primary call), no critique call
-    assert mock_acompletion.call_count == 1, (
-        "effort='fast' must skip the actor-critic critique call — only 1 acompletion call expected"
+    # With effort=fast: primary call made, critic call never invoked
+    assert mock_primary.call_count == 1, (
+        "effort='fast' must trigger the primary acompletion call once"
+    )
+    assert mock_critic.call_count == 0, (
+        "effort='fast' must skip the actor-critic critique call"
     )
     assistant_events = [e for e in events if e["type"] == "assistant_message"]
     assert assistant_events[-1]["content"] == "My answer."
@@ -81,8 +85,10 @@ async def test_effort_balanced_triggers_actor_critic():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.side_effect = [text_stream, critique_response]
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
+        mock_critic.return_value = critique_response
 
         async for event in run_agent(
             db=db,
@@ -96,9 +102,12 @@ async def test_effort_balanced_triggers_actor_critic():
         ):
             events.append(event)
 
-    # With effort=balanced: TWO acompletion calls (primary + critique)
-    assert mock_acompletion.call_count == 2, (
-        "effort='balanced' must trigger actor-critic — 2 acompletion calls expected"
+    # With effort=balanced: primary call + critic call
+    assert mock_primary.call_count == 1, (
+        "effort='balanced' must trigger the primary acompletion call once"
+    )
+    assert mock_critic.call_count == 1, (
+        "effort='balanced' must trigger actor-critic — 1 critic acompletion call expected"
     )
     assistant_events = [e for e in events if e["type"] == "assistant_message"]
     assert assistant_events[-1]["content"] == "Revised answer with more detail."
@@ -115,8 +124,10 @@ async def test_lgtm_response_returns_original_text():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.side_effect = [text_stream, critique_response]
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
+        mock_critic.return_value = critique_response
 
         async for event in run_agent(
             db=db,
@@ -147,8 +158,10 @@ async def test_non_lgtm_response_returns_revised_text():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.side_effect = [text_stream, critique_response]
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
+        mock_critic.return_value = critique_response
 
         async for event in run_agent(
             db=db,
@@ -177,8 +190,9 @@ async def test_guest_skips_actor_critic_regardless_of_effort():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.return_value = text_stream
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
 
         async for event in run_agent(
             db=db,
@@ -192,9 +206,12 @@ async def test_guest_skips_actor_critic_regardless_of_effort():
         ):
             events.append(event)
 
-    # Guest with effort=balanced: still only 1 acompletion call (no critique)
-    assert mock_acompletion.call_count == 1, (
-        "Guest users must skip actor-critic — only 1 acompletion call expected even with effort='balanced'"
+    # Guest with effort=balanced: primary call made, critic never invoked
+    assert mock_primary.call_count == 1, (
+        "Guest users must trigger the primary acompletion call once"
+    )
+    assert mock_critic.call_count == 0, (
+        "Guest users must skip actor-critic — critic acompletion must not be called"
     )
 
 
@@ -208,8 +225,10 @@ async def test_effort_thorough_triggers_actor_critic():
     db = _mock_db()
     events = []
 
-    with patch("app.services.agent.acompletion") as mock_acompletion:
-        mock_acompletion.side_effect = [text_stream, critique_response]
+    with patch("app.services.agent.acompletion") as mock_primary, \
+         patch("app.services.critic.acompletion") as mock_critic:
+        mock_primary.return_value = text_stream
+        mock_critic.return_value = critique_response
 
         async for event in run_agent(
             db=db,
@@ -223,6 +242,9 @@ async def test_effort_thorough_triggers_actor_critic():
         ):
             events.append(event)
 
-    assert mock_acompletion.call_count == 2, (
-        "effort='thorough' must trigger actor-critic — 2 acompletion calls expected"
+    assert mock_primary.call_count == 1, (
+        "effort='thorough' must trigger the primary acompletion call once"
+    )
+    assert mock_critic.call_count == 1, (
+        "effort='thorough' must trigger actor-critic — 1 critic acompletion call expected"
     )
