@@ -107,6 +107,7 @@ async def _run_responses_agent(
     client = AsyncOpenAI(api_key=api_key)
     ctx = ToolContext(user_id=user_id, db=db, is_guest=is_guest)
 
+    consecutive_tool_only_iterations = 0
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Responses API iteration {iteration + 1}/{settings.agent_max_iterations}")
 
@@ -273,7 +274,45 @@ async def _run_responses_agent(
             input_messages.append({"type": "function_call_output", "call_id": call_id, "output": tool_result})
             yield {"type": "tool_message", "tool_call_id": call_id, "content": tool_result}
 
-    logger.warning(f"Responses API agent hit max iterations ({settings.agent_max_iterations})")
+        # Nudge: after 5 consecutive tool-only iterations, prompt for synthesis
+        if pending_calls and not accumulated_text.strip():
+            consecutive_tool_only_iterations += 1
+            if consecutive_tool_only_iterations >= 5:
+                logger.warning(
+                    "Responses API: %d consecutive tool-only iterations — sending synthesis nudge",
+                    consecutive_tool_only_iterations,
+                )
+                input_messages.append({
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "You have gathered enough information. Stop calling tools and write your final answer now."}],
+                })
+        else:
+            consecutive_tool_only_iterations = 0
+
+    logger.warning(f"Responses API agent hit max iterations ({settings.agent_max_iterations}) — attempting forced synthesis")
+    _effort_map = {"fast": "low", "balanced": "medium", "thorough": "high"}
+    try:
+        synth_stream = await client.responses.create(
+            model=model,
+            input=input_messages,
+            tools=[],          # force synthesis — no tools available
+            reasoning={"effort": _effort_map.get(effort, "medium"), "summary": "auto"},
+            include=["reasoning.encrypted_content"],
+            store=True,
+            stream=True,
+        )
+        synth_text = ""
+        async for event in synth_stream:
+            if event.type == "response.output_text.delta":
+                synth_text += event.delta
+                yield {"type": "token", "content": event.delta}
+        if synth_text.strip():
+            yield {"type": "assistant_message", "content": synth_text, "tool_calls": None}
+            yield {"type": "done"}
+            return
+    except Exception as e:
+        logger.error(f"Forced synthesis call failed: {e}", exc_info=True)
+    # Forced synthesis produced no text or failed — fall through to error
     yield {
         "type": "error",
         "detail": f"Agent exceeded {settings.agent_max_iterations} iterations.",
