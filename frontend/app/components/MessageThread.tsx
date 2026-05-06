@@ -105,9 +105,31 @@ export default function MessageThread({
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
+                        pre: ({ children }) => (
+                          <pre
+                            style={{
+                              background: "var(--bg-elevated)",
+                              borderRadius: "6px",
+                              padding: "1em",
+                              overflowX: "auto",
+                              fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                              fontSize: "0.875em",
+                              lineHeight: "1.5",
+                              margin: "0.5em 0",
+                            }}
+                          >
+                            {children}
+                          </pre>
+                        ),
                         code: ({ className, children, ...props }) => {
                           const isBlock = Boolean(className);
-                          if (isBlock) return <code className={className} {...props}>{children}</code>;
+                          if (isBlock) {
+                            return (
+                              <code style={{ fontFamily: "inherit" }} {...props}>
+                                {children}
+                              </code>
+                            );
+                          }
                           return (
                             <code
                               style={{
