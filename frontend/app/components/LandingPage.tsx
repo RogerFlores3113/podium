@@ -87,7 +87,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-4 text-sm" style={{ color: "var(--text-muted)" }}>
             <span>No sign-up required · Guest sessions expire in 24h</span>
             <a
-              href="https://github.com/RogerFlores3113/podium"
+              href="https://github.com/RogerFlores3113"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-opacity hover:opacity-70 underline underline-offset-2"
