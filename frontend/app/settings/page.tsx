@@ -64,8 +64,12 @@ export default function SettingsPage() {
   // --- API Keys ---
 
   const loadKeys = async () => {
-    const res = await authFetch(`${API_URL}/keys/`);
-    if (res.ok) setKeys(await res.json());
+    try {
+      const res = await authFetch(`${API_URL}/keys/`);
+      if (res.ok) setKeys(await res.json());
+    } catch {
+      // non-critical — keep current state on network failure
+    }
   };
 
   const handleAddKey = async (e: React.FormEvent) => {
@@ -81,7 +85,7 @@ export default function SettingsPage() {
     if (res.ok) {
       setKeyStatus("Key saved");
       setApiKey("");
-      loadKeys();
+      await loadKeys();
     } else {
       setKeyStatus("Failed to save key");
     }
@@ -90,7 +94,7 @@ export default function SettingsPage() {
   const handleDeleteKey = async (keyId: string) => {
     const res = await authFetch(`${API_URL}/keys/${keyId}`, { method: "DELETE" });
     if (res.ok) {
-      loadKeys();
+      await loadKeys();
     } else {
       setKeyStatus("Failed to remove key");
     }
@@ -105,12 +109,16 @@ export default function SettingsPage() {
   // --- Memories ---
 
   const loadMemories = async () => {
-    const url =
-      categoryFilter === "all"
-        ? `${API_URL}/memories/`
-        : `${API_URL}/memories/?category=${encodeURIComponent(categoryFilter)}`;
-    const res = await authFetch(url);
-    if (res.ok) setMemories(await res.json());
+    try {
+      const url =
+        categoryFilter === "all"
+          ? `${API_URL}/memories/`
+          : `${API_URL}/memories/?category=${encodeURIComponent(categoryFilter)}`;
+      const res = await authFetch(url);
+      if (res.ok) setMemories(await res.json());
+    } catch {
+      // non-critical — keep current state on network failure
+    }
   };
 
   const handleAddMemory = async (e: React.FormEvent) => {
