@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ChatComposerProps {
   isLoading: boolean;
   isGuest: boolean;
   onSubmit: (message: string) => void;
+  externalValue?: string;
 }
 
-export default function ChatComposer({ isLoading, isGuest: _isGuest, onSubmit }: ChatComposerProps) {
+export default function ChatComposer({ isLoading, isGuest: _isGuest, onSubmit, externalValue }: ChatComposerProps) {
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (externalValue) setInput(externalValue);
+  }, [externalValue]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

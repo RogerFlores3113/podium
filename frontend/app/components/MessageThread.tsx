@@ -6,7 +6,14 @@ import remarkGfm from "remark-gfm";
 import { ToolCallDisplay } from "@/app/components/ToolCallDisplay";
 import type { Message } from "@/app/types/chat";
 
-const CAPABILITY_CARDS = [
+interface CapabilityCard {
+  icon: string;
+  label: string;
+  prompt: string;
+  prefill?: true;
+}
+
+const CAPABILITY_CARDS: CapabilityCard[] = [
   {
     icon: "🔍",
     label: "Search the web",
@@ -30,7 +37,8 @@ const CAPABILITY_CARDS = [
   {
     icon: "🔗",
     label: "Read a URL",
-    prompt: "Read https://openai.com/blog and summarize the three most recent announcements",
+    prompt: "Read [paste URL here] and summarize the key points",
+    prefill: true,
   },
 ];
 
@@ -50,7 +58,8 @@ interface MessageThreadProps {
   messages: Message[];
   isThinking: boolean;
   showCapabilityCards: boolean;
-  onCardClick: (prompt: string) => void;
+  onCardClick: (prompt: string, label: string) => void;
+  onCardPrefill?: (prompt: string) => void;
   isGuest?: boolean;
 }
 
@@ -59,6 +68,7 @@ export default function MessageThread({
   isThinking,
   showCapabilityCards,
   onCardClick,
+  onCardPrefill,
   isGuest = false,
 }: MessageThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -203,7 +213,13 @@ export default function MessageThread({
           {CAPABILITY_CARDS.filter((card) => !(isGuest && card.label === "Remember something")).map((card) => (
             <button
               key={card.label}
-              onClick={() => onCardClick(card.prompt)}
+              onClick={() => {
+                if (card.prefill && onCardPrefill) {
+                  onCardPrefill(card.prompt);
+                } else {
+                  onCardClick(card.prompt, card.label);
+                }
+              }}
               className="flex items-center gap-3 rounded-lg px-4 py-3 text-left transition-opacity hover:opacity-80"
               style={{
                 background: "var(--bg-surface)",

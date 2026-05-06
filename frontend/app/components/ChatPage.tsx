@@ -47,6 +47,7 @@ export default function ChatPage() {
   const [byokError, setByokError] = useState(false);
   const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
   const [showByokModal, setShowByokModal] = useState(false);
+  const [prefillValue, setPrefillValue] = useState("");
   const hasWelcomed = useRef(false);
   const hasShownByokModal = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -435,8 +436,13 @@ export default function ChatPage() {
     setIsLoading(false);
   };
 
-  const handleCardClick = (prompt: string) => {
+  const handleCardClick = (prompt: string, label: string) => {
+    void label;
     submitMessage(prompt);
+  };
+
+  const handleCardPrefill = (prompt: string) => {
+    setPrefillValue(prompt);
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -662,6 +668,7 @@ export default function ChatPage() {
             isThinking={isThinking}
             showCapabilityCards={showCapabilityCards}
             onCardClick={handleCardClick}
+            onCardPrefill={handleCardPrefill}
             isGuest={isGuest}
           />
 
@@ -670,6 +677,7 @@ export default function ChatPage() {
             isLoading={isLoading}
             isGuest={isGuest}
             onSubmit={submitMessage}
+            externalValue={prefillValue}
           />
         </main>
       </div>
