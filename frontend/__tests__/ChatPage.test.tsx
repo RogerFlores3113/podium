@@ -1241,7 +1241,11 @@ describe("ollama model fetch timing", () => {
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
     mockIsSignedIn = true;
-    // isSignedIn effect fires fetchConversations first, then ollama fetch — match that order
+    // Documents fetch fires first (useEffect declared before isSignedIn effect)
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    // isSignedIn effect fires fetchConversations
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 }),
     );

@@ -48,6 +48,7 @@ export default function ChatPage() {
   const [byokCopy, setByokCopy] = useState(ERROR_COPY.byok);
   const [showByokModal, setShowByokModal] = useState(false);
   const [prefillValue, setPrefillValue] = useState("");
+  const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
   const hasWelcomed = useRef(false);
   const hasShownByokModal = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,6 +141,16 @@ export default function ChatPage() {
   useEffect(() => {
     if (isLoaded) fetchConversations();
   }, [isLoaded, fetchConversations]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    authFetch(`${API_URL}/documents/?limit=1`)
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        setHasDocuments(Array.isArray(data) && data.length > 0);
+      })
+      .catch(() => setHasDocuments(null));
+  }, [isLoaded, isSignedIn, authFetch]);
 
   // Reactive guest cleanup: when Clerk confirms sign-in, clear guest state and
   // reload conversation list so sidebar populates without a page refresh.
@@ -437,7 +448,17 @@ export default function ChatPage() {
   };
 
   const handleCardClick = (prompt: string, label: string) => {
-    void label;
+    if (label === "Search my documents" && hasDocuments === false) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant" as const,
+          content:
+            "You haven't uploaded any documents yet. Use the upload button below to add a PDF — I'll be able to search it once it's processed.",
+        },
+      ]);
+      return;
+    }
     submitMessage(prompt);
   };
 
