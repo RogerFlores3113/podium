@@ -1,6 +1,7 @@
 import uuid
 import json
 import logging
+import re as _re
 from sse_starlette.sse import EventSourceResponse
 
 import httpx
@@ -22,6 +23,17 @@ from app.limiter import limiter
 from app.auth import get_or_create_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _generate_title(message: str) -> str:
+    text = _re.sub(r"https?://\S+", "", message)
+    text = " ".join(text.split())
+    if not text:
+        return message[:60]
+    if len(text) <= 60:
+        return text
+    truncated = text[:60].rsplit(" ", 1)[0]
+    return (truncated or text[:60]) + "…"
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +217,7 @@ async def chat_stream(
     else:
         conversation = Conversation(
             user_id=user_id,
-            title=body.message[:100],
+            title=_generate_title(body.message),
         )
         db.add(conversation)
         await db.flush()

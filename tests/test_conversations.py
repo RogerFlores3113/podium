@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.routers.chat import delete_conversation, update_conversation
+from app.routers.chat import delete_conversation, update_conversation, _generate_title
 from app.models import Conversation, User
 from app.schemas import ConversationUpdate
 
@@ -181,3 +181,24 @@ async def test_update_conversation_other_user_returns_404():
     assert exc_info.value.detail == "Conversation not found"
     db.commit.assert_not_awaited()
     db.refresh.assert_not_awaited()
+
+
+# _generate_title tests
+
+def test_generate_title_plain_message():
+    assert _generate_title("Remember that I prefer concise answers") == "Remember that I prefer concise answers"
+
+def test_generate_title_strips_url():
+    result = _generate_title("Read https://openai.com/blog and summarize the three most recent announcements")
+    assert "https://" not in result
+    assert result.startswith("Read")
+
+def test_generate_title_truncates_long_message():
+    msg = "Search the web for recent developments in large language model benchmarks and summarize what you find"
+    result = _generate_title(msg)
+    assert len(result) <= 63
+    assert result.endswith("…")
+
+def test_generate_title_url_only_falls_back():
+    result = _generate_title("https://example.com/very/long/path")
+    assert len(result) > 0
