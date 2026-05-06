@@ -108,7 +108,7 @@ export default function SettingsPage() {
     const url =
       categoryFilter === "all"
         ? `${API_URL}/memories/`
-        : `${API_URL}/memories/?category=${categoryFilter}`;
+        : `${API_URL}/memories/?category=${encodeURIComponent(categoryFilter)}`;
     const res = await authFetch(url);
     if (res.ok) setMemories(await res.json());
   };
