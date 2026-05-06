@@ -402,6 +402,7 @@ async def run_agent(
     # Build tool context — passed to every tool execution
     ctx = ToolContext(user_id=user_id, db=db, is_guest=is_guest)
 
+    consecutive_tool_only_iterations = 0
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")
 
@@ -604,8 +605,48 @@ async def run_agent(
                 "content": tool_result,
             }
 
+        # Nudge: after 5 consecutive tool-only iterations, prompt for synthesis
+        if accumulated_tool_calls and not accumulated_text.strip():
+            consecutive_tool_only_iterations += 1
+            if consecutive_tool_only_iterations >= 5:
+                logger.warning(
+                    "litellm agent: %d consecutive tool-only iterations — sending synthesis nudge",
+                    consecutive_tool_only_iterations,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": "You have gathered enough information. Stop calling tools and write your final answer now.",
+                })
+        else:
+            consecutive_tool_only_iterations = 0
+
     # If we hit max iterations, the agent is stuck in a loop
-    logger.warning(f"Agent hit max iterations ({settings.agent_max_iterations})")
+    logger.warning(f"Agent hit max iterations ({settings.agent_max_iterations}) — attempting forced synthesis")
+    try:
+        synth_response = await acompletion(
+            model=resolved_model,
+            messages=messages,
+            tools=None,        # force synthesis — no tools available
+            api_key="" if is_ollama else resolved_api_key,
+            api_base=normalize_ollama_url(resolved_api_key) if is_ollama else None,
+            max_tokens=1500,
+            stream=True,
+        )
+        synth_text = ""
+        async for chunk in synth_response:
+            if chunk is None:
+                break
+            delta = chunk.choices[0].delta
+            if delta.content:
+                synth_text += delta.content
+                yield {"type": "token", "content": delta.content}
+        if synth_text.strip():
+            yield {"type": "assistant_message", "content": synth_text, "tool_calls": None}
+            yield {"type": "done"}
+            return
+    except Exception as e:
+        logger.error(f"Forced synthesis call failed: {e}", exc_info=True)
+    # Forced synthesis produced no text or failed — fall through to error
     yield {
         "type": "error",
         "detail": f"Agent exceeded {settings.agent_max_iterations} iterations. "
