@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
+import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -27,6 +28,22 @@ interface MemoryInfo {
 export default function SettingsPage() {
   const authFetch = useAuthFetch();
   const { isLoaded } = useAuth();
+  const router = useRouter();
+  const [guestToast, setGuestToast] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      const guestToken = sessionStorage.getItem("podium_guest_token");
+      const guestExpires = sessionStorage.getItem("podium_guest_expires");
+      if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
+        setGuestToast(true);
+        setTimeout(() => router.replace("/"), 2000);
+      }
+    } catch {
+      // sessionStorage unavailable (SSR or private browsing) — ignore
+    }
+  }, [isLoaded, router]);
 
   // API keys state
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -178,6 +195,18 @@ export default function SettingsPage() {
 
   return (
     <main className="max-w-3xl mx-auto p-8">
+      {guestToast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg text-sm z-50"
+          style={{
+            background: "var(--bg-elevated)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          Settings require an account. Sign up to save preferences.
+        </div>
+      )}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
           Settings
