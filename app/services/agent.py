@@ -402,12 +402,12 @@ async def run_agent(
     # Build tool context — passed to every tool execution
     ctx = ToolContext(user_id=user_id, db=db, is_guest=is_guest)
 
+    is_ollama = resolved_model.startswith("ollama/")
     consecutive_tool_only_iterations = 0
     for iteration in range(settings.agent_max_iterations):
         logger.info(f"Agent iteration {iteration + 1}/{settings.agent_max_iterations}")
 
         try:
-            is_ollama = resolved_model.startswith("ollama/")
             response = await acompletion(
                 model=resolved_model,
                 messages=messages,
