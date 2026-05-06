@@ -192,6 +192,7 @@ export default function ChatPage() {
   }, []);
 
   const startNewConversation = () => {
+    setPrefillValue("");
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setConversationId(null);
     hasWelcomed.current = true;
@@ -448,7 +449,7 @@ export default function ChatPage() {
   };
 
   const handleCardClick = (prompt: string, label: string) => {
-    if (label === "Search my documents" && hasDocuments === false) {
+    if (label === "Search my documents" && !hasDocuments) {
       setMessages((prev) => [
         ...prev,
         {
@@ -546,7 +547,7 @@ export default function ChatPage() {
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
         {isGuest && (
-          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #f0f9ff)", color: "var(--text-secondary, #555)" }}>
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
             Guest session — your data will be deleted in 24 hours.{" "}
             <a href="/sign-up" className="underline font-medium">Sign up</a> to keep your work.
           </div>
@@ -589,7 +590,7 @@ export default function ChatPage() {
           </div>
         )}
         {byokError && (
-          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #fff8e1)", color: "var(--text-secondary, #555)" }}>
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
             {byokCopy}{" "}
             <a href="/settings" className="underline font-medium">Settings →</a>
           </div>
