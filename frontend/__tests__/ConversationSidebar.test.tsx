@@ -68,6 +68,25 @@ describe("ConversationSidebar", () => {
     expect(baseProps.onDeleteConversation).toHaveBeenCalledWith("conv-1");
   });
 
+  it("shows pencil rename button on hover", () => {
+    render(<ConversationSidebar {...baseProps} />);
+    const item = screen.getByRole("button", { name: /My Conversation/i });
+    fireEvent.mouseEnter(item);
+    const renameBtn = screen.getByTitle("Rename conversation");
+    expect(renameBtn).toBeDefined();
+  });
+
+  it("opens rename input when pencil button is clicked", () => {
+    render(<ConversationSidebar {...baseProps} />);
+    const item = screen.getByRole("button", { name: /My Conversation/i });
+    fireEvent.mouseEnter(item);
+    const renameBtn = screen.getByTitle("Rename conversation");
+    fireEvent.click(renameBtn);
+    const input = screen.getByRole("textbox");
+    expect(input).toBeDefined();
+    expect((input as HTMLInputElement).value).toBe("My Conversation");
+  });
+
   it("D-04: ChatComposer is keyed to conversationId (static check)", () => {
     const chatPageContent = fs.readFileSync(
       path.join(__dirname, "../app/components/ChatPage.tsx"),

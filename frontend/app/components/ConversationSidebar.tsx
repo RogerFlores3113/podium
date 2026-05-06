@@ -169,9 +169,8 @@ export default function ConversationSidebar({
                   {formatRelativeTime(conv.created_at)}
                 </div>
                 {hoveredConvId === conv.id && (
-                  <button
-                    type="button"
-                    title="Delete conversation"
+                  <div
+                    className="absolute top-1/2 right-2 -translate-y-1/2 flex items-center gap-1"
                     onMouseEnter={() => {
                       if (hoverHideTimeoutRef.current) {
                         clearTimeout(hoverHideTimeoutRef.current);
@@ -185,15 +184,33 @@ export default function ConversationSidebar({
                         0
                       );
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteConversation(conv.id);
-                    }}
-                    className="absolute top-1/2 right-2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-base rounded-full transition-opacity hover:opacity-80"
-                    style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
                   >
-                    ×
-                  </button>
+                    <button
+                      type="button"
+                      title="Rename conversation"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(conv.id);
+                        setEditTitle(conv.title || "");
+                      }}
+                      className="w-6 h-6 flex items-center justify-center text-sm rounded-full transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete conversation"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteConversation(conv.id);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center text-base rounded-full transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 )}
               </div>
             ))
