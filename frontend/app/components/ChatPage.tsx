@@ -49,6 +49,8 @@ export default function ChatPage() {
   const [showByokModal, setShowByokModal] = useState(false);
   const [prefillValue, setPrefillValue] = useState("");
   const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
+  const [guestSettingsToast, setGuestSettingsToast] = useState(false);
+  const guestSettingsToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasWelcomed = useRef(false);
   const hasShownByokModal = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -561,6 +563,21 @@ export default function ChatPage() {
             <a href="/sign-up" className="underline font-medium">Sign up</a> to keep your work.
           </div>
         )}
+        {guestSettingsToast && (
+          <div
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm text-center shadow-lg"
+            style={{
+              background: "var(--bg-elevated)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              pointerEvents: "none",
+            }}
+          >
+            <span className="font-medium">Settings require an account.</span>
+            <br />
+            <span style={{ color: "var(--text-muted)" }}>Sign up to save preferences and API keys.</span>
+          </div>
+        )}
         {/* D-06: BYOK modal — first 402 per session shows this; subsequent 402s show the banner below */}
         {showByokModal && (
           <div
@@ -676,13 +693,27 @@ export default function ChatPage() {
                 Upload PDF
                 <input type="file" accept=".pdf" onChange={handleUpload} className="hidden" />
               </label>
-              <a
-                href="/settings"
-                className="text-sm transition-colors hover:opacity-80"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Settings
-              </a>
+              {isGuest ? (
+                <button
+                  onClick={() => {
+                    if (guestSettingsToastRef.current) clearTimeout(guestSettingsToastRef.current);
+                    setGuestSettingsToast(true);
+                    guestSettingsToastRef.current = setTimeout(() => setGuestSettingsToast(false), 3000);
+                  }}
+                  className="text-sm transition-colors hover:opacity-80 cursor-pointer"
+                  style={{ color: "var(--text-muted)", background: "none", border: "none", padding: 0 }}
+                >
+                  Settings
+                </button>
+              ) : (
+                <a
+                  href="/settings"
+                  className="text-sm transition-colors hover:opacity-80"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Settings
+                </a>
+              )}
               <button
                 onClick={toggleDark}
                 className="text-lg transition-opacity hover:opacity-70"
