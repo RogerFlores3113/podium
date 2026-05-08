@@ -61,7 +61,7 @@ export default function LandingPage() {
           Podium.
         </h1>
         <p className="text-2xl font-medium mb-3" style={{ color: "var(--text-primary)" }}>
-          Your personal AI, built the right way.
+          Your personal AI platform.
         </p>
         <p className="text-lg mb-10" style={{ color: "var(--text-muted)" }}>
           Memory-first. Document-aware. Runs on your models.
@@ -87,7 +87,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-4 text-sm" style={{ color: "var(--text-muted)" }}>
             <span>No sign-up required · Guest sessions expire in 24h</span>
             <a
-              href="https://github.com/RogerFlores3113/podium"
+              href="https://github.com/RogerFlores3113"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-opacity hover:opacity-70 underline underline-offset-2"

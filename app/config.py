@@ -6,6 +6,7 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "https://podium-beta.vercel.app",
     "http://localhost:8000",
+    "https://podium.rogerflores.dev",
 ]
 
 # Models available for selection. Provider drives which BYOK key is used.

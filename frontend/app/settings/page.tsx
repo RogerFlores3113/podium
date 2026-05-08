@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { useAuthFetch } from "@/app/hooks/useAuthFetch";
+import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -27,6 +28,33 @@ interface MemoryInfo {
 export default function SettingsPage() {
   const authFetch = useAuthFetch();
   const { isLoaded } = useAuth();
+  const router = useRouter();
+  const [guestToast, setGuestToast] = useState(false);
+
+  // Apply saved theme so Settings respects dark mode like ChatPage does
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      } else {
+        document.documentElement.setAttribute("data-theme", "");
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      const guestToken = sessionStorage.getItem("podium_guest_token");
+      const guestExpires = sessionStorage.getItem("podium_guest_expires");
+      if (guestToken && guestExpires && new Date(guestExpires) > new Date()) {
+        setGuestToast(true);
+      }
+    } catch {
+      // sessionStorage unavailable (SSR or private browsing) — ignore
+    }
+  }, [isLoaded]);
 
   // API keys state
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -47,8 +75,12 @@ export default function SettingsPage() {
   // --- API Keys ---
 
   const loadKeys = async () => {
-    const res = await authFetch(`${API_URL}/keys/`);
-    if (res.ok) setKeys(await res.json());
+    try {
+      const res = await authFetch(`${API_URL}/keys/`);
+      if (res.ok) setKeys(await res.json());
+    } catch {
+      // non-critical — keep current state on network failure
+    }
   };
 
   const handleAddKey = async (e: React.FormEvent) => {
@@ -64,7 +96,7 @@ export default function SettingsPage() {
     if (res.ok) {
       setKeyStatus("Key saved");
       setApiKey("");
-      loadKeys();
+      await loadKeys();
     } else {
       setKeyStatus("Failed to save key");
     }
@@ -73,7 +105,7 @@ export default function SettingsPage() {
   const handleDeleteKey = async (keyId: string) => {
     const res = await authFetch(`${API_URL}/keys/${keyId}`, { method: "DELETE" });
     if (res.ok) {
-      loadKeys();
+      await loadKeys();
     } else {
       setKeyStatus("Failed to remove key");
     }
@@ -88,12 +120,16 @@ export default function SettingsPage() {
   // --- Memories ---
 
   const loadMemories = async () => {
-    const url =
-      categoryFilter === "all"
-        ? `${API_URL}/memories/`
-        : `${API_URL}/memories/?category=${categoryFilter}`;
-    const res = await authFetch(url);
-    if (res.ok) setMemories(await res.json());
+    try {
+      const url =
+        categoryFilter === "all"
+          ? `${API_URL}/memories/`
+          : `${API_URL}/memories/?category=${encodeURIComponent(categoryFilter)}`;
+      const res = await authFetch(url);
+      if (res.ok) setMemories(await res.json());
+    } catch {
+      // non-critical — keep current state on network failure
+    }
   };
 
   const handleAddMemory = async (e: React.FormEvent) => {
@@ -132,11 +168,14 @@ export default function SettingsPage() {
   };
 
   const handleDeleteMemory = async (memoryId: string) => {
+    if (!confirm("Delete this memory?")) return;
     setMemories((prev) => prev.filter((m) => m.id !== memoryId));
     const res = await authFetch(`${API_URL}/memories/${memoryId}`, {
       method: "DELETE",
     });
-    if (!res.ok) {
+    if (res.ok) {
+      showMemoryStatus("Memory deleted");
+    } else {
       await loadMemories();
       showMemoryStatus("Failed to delete memory");
     }
@@ -175,6 +214,32 @@ export default function SettingsPage() {
     setEditingId(memory.id);
     setEditContent(memory.content);
   };
+
+  if (guestToast) {
+    return (
+      <main
+        className="min-h-screen flex items-start justify-center pt-24"
+        style={{ background: "var(--bg-base)" }}
+      >
+        <div
+          className="px-8 py-6 rounded-xl text-sm text-center max-w-sm"
+          style={{
+            background: "var(--bg-elevated)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <p className="font-medium mb-1">Settings require an account.</p>
+          <p style={{ color: "var(--text-muted)" }}>
+            Sign up to save preferences and API keys.{" "}
+            <a href="/" style={{ color: "var(--accent-warm)" }}>
+              Go back
+            </a>
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="max-w-3xl mx-auto p-8">

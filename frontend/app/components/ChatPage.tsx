@@ -49,6 +49,8 @@ export default function ChatPage() {
   const [showByokModal, setShowByokModal] = useState(false);
   const [prefillValue, setPrefillValue] = useState("");
   const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
+  const [guestSettingsToast, setGuestSettingsToast] = useState(false);
+  const guestSettingsToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasWelcomed = useRef(false);
   const hasShownByokModal = useRef(false);
   const uploadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -192,6 +194,7 @@ export default function ChatPage() {
   }, []);
 
   const startNewConversation = () => {
+    setPrefillValue("");
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setConversationId(null);
     hasWelcomed.current = true;
@@ -408,6 +411,15 @@ export default function ChatPage() {
                   });
                   setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                 } else if (currentEvent === "done") {
+                  // Pop any trailing empty assistant placeholder before finishing
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last && last.role === "assistant" && !last.content && (!last.toolCalls || last.toolCalls.length === 0)) {
+                      updated.pop();
+                    }
+                    return updated;
+                  });
                   // Refresh sidebar after new conversation completes
                   fetchConversations();
                 } else if (currentEvent === "error") {
@@ -448,7 +460,7 @@ export default function ChatPage() {
   };
 
   const handleCardClick = (prompt: string, label: string) => {
-    if (label === "Search my documents" && hasDocuments === false) {
+    if (label === "Search my documents" && !hasDocuments) {
       setMessages((prev) => [
         ...prev,
         {
@@ -546,9 +558,24 @@ export default function ChatPage() {
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
         {isGuest && (
-          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #f0f9ff)", color: "var(--text-secondary, #555)" }}>
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
             Guest session — your data will be deleted in 24 hours.{" "}
             <a href="/sign-up" className="underline font-medium">Sign up</a> to keep your work.
+          </div>
+        )}
+        {guestSettingsToast && (
+          <div
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm text-center shadow-lg"
+            style={{
+              background: "var(--bg-elevated)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              pointerEvents: "none",
+            }}
+          >
+            <span className="font-medium">Settings require an account.</span>
+            <br />
+            <span style={{ color: "var(--text-muted)" }}>Sign up to save preferences and API keys.</span>
           </div>
         )}
         {/* D-06: BYOK modal — first 402 per session shows this; subsequent 402s show the banner below */}
@@ -567,7 +594,7 @@ export default function ChatPage() {
                 Add your API key to continue
               </h2>
               <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-                Podium uses your own API key — nothing is stored on our servers after your messages are processed. Add a key in Settings to start chatting.
+                Podium uses your own API key to chat. Your conversations and memories are saved to your account. Add a key in Settings to start chatting.
               </p>
               <div className="flex gap-3">
                 <a
@@ -589,7 +616,7 @@ export default function ChatPage() {
           </div>
         )}
         {byokError && (
-          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-subtle, #fff8e1)", color: "var(--text-secondary, #555)" }}>
+          <div className="text-center text-sm py-2 px-4" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
             {byokCopy}{" "}
             <a href="/settings" className="underline font-medium">Settings →</a>
           </div>
@@ -666,13 +693,27 @@ export default function ChatPage() {
                 Upload PDF
                 <input type="file" accept=".pdf" onChange={handleUpload} className="hidden" />
               </label>
-              <a
-                href="/settings"
-                className="text-sm transition-colors hover:opacity-80"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Settings
-              </a>
+              {isGuest ? (
+                <button
+                  onClick={() => {
+                    if (guestSettingsToastRef.current) clearTimeout(guestSettingsToastRef.current);
+                    setGuestSettingsToast(true);
+                    guestSettingsToastRef.current = setTimeout(() => setGuestSettingsToast(false), 3000);
+                  }}
+                  className="text-sm transition-colors hover:opacity-80 cursor-pointer"
+                  style={{ color: "var(--text-muted)", background: "none", border: "none", padding: 0 }}
+                >
+                  Settings
+                </button>
+              ) : (
+                <a
+                  href="/settings"
+                  className="text-sm transition-colors hover:opacity-80"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Settings
+                </a>
+              )}
               <button
                 onClick={toggleDark}
                 className="text-lg transition-opacity hover:opacity-70"

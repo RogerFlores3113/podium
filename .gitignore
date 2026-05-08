@@ -244,3 +244,13 @@ infra/.terraform.lock.hcl
 
 # GSD planning docs (local-only)
 .planning/
+
+# Local tool directories
+.bg-shell/
+.gsd/
+node_modules/
+
+# Word docs / UAT reports (local only)
+*.docx
+PODIUM_CLEANUP.md
+UAT_GUIDE.md

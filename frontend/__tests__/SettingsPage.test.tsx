@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+}));
+
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
     getToken: vi.fn().mockResolvedValue("test-token"),
@@ -54,6 +58,7 @@ describe("SettingsPage", () => {
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(globalThis, "fetch");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -122,7 +127,7 @@ describe("SettingsPage", () => {
   });
 
   it("memoryStatus auto-clears after 3 seconds", async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     mockInitialFetches(fetchSpy, [], [MEMORY_1]);
