@@ -1,7 +1,7 @@
 # ECS security group — outbound only (Cloudflare Tunnel sidecar handles ingress)
 resource "aws_security_group" "ecs" {
   name        = "${var.project_name}-ecs-sg"
-  description = "Cloudflare Tunnel outbound only (no inbound)"
+  description = "Allow inbound from ALB only"
   vpc_id      = aws_vpc.main.id
 
   egress {
