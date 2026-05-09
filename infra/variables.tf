@@ -67,3 +67,9 @@ variable "guest_jwt_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "cloudflare_tunnel_token" {
+  description = "Cloudflare Tunnel token from Zero Trust dashboard (Networks -> Tunnels). Sensitive."
+  type        = string
+  sensitive   = true
+}

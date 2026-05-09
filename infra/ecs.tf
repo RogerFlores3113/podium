@@ -98,16 +98,45 @@ resource "aws_ecs_task_definition" "app" {
         retries     = 3
         startPeriod = 60
       }
+    },
+    {
+      name      = "cloudflared"
+      image     = "cloudflare/cloudflared:latest"
+      essential = true
+      command   = ["tunnel", "--no-autoupdate", "run"]
+
+      secrets = [
+        {
+          name      = "TUNNEL_TOKEN"
+          valueFrom = aws_ssm_parameter.cloudflare_tunnel_token.arn
+        }
+      ]
+
+      dependsOn = [
+        {
+          containerName = "app"
+          condition     = "HEALTHY"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "cloudflared"
+        }
+      }
     }
   ])
 }
 
 resource "aws_ecs_service" "app" {
-  name            = "${var.project_name}-app"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = "${var.project_name}-app"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.app.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
   enable_execute_command = true
 
   network_configuration {
@@ -116,19 +145,8 @@ resource "aws_ecs_service" "app" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "app"
-    container_port   = 8000
-  }
-
-  # Allow service to stabilize before marking unhealthy
-  health_check_grace_period_seconds = 120
-
   # Force new deployment when task definition changes
   force_new_deployment = true
-
-  depends_on = [aws_lb_listener.http]
 }
 
 # --- Worker Service ---
