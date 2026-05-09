@@ -1,9 +1,3 @@
-# Purely display. helps find keys and information after terraform apply. Can also run "terraform output OUTPUTNAME" in console.
-output "alb_dns_name" {
-  description = "DNS name of the load balancer (your API URL)"
-  value       = aws_lb.main.dns_name
-}
-
 output "ecr_repository_url" {
   description = "ECR repository URL for pushing Docker images"
   value       = aws_ecr_repository.app.repository_url

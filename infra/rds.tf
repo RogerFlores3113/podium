@@ -37,9 +37,9 @@ resource "aws_db_instance" "main" {
   # You'll run CREATE EXTENSION vector via Alembic migration
 
   # For dev: allow deletion without final snapshot
-  skip_final_snapshot       = true
-  deletion_protection         = false
-  apply_immediately         = true
+  skip_final_snapshot = true
+  deletion_protection = false
+  apply_immediately   = true
 
   tags = {
     Name = "${var.project_name}-db"

@@ -57,3 +57,13 @@ resource "aws_ssm_parameter" "guest_jwt_secret" {
     Name = "${var.project_name}-guest-jwt-secret"
   }
 }
+
+resource "aws_ssm_parameter" "cloudflare_tunnel_token" {
+  name  = "/${var.project_name}/cloudflare-tunnel-token"
+  type  = "SecureString"
+  value = var.cloudflare_tunnel_token
+
+  tags = {
+    Name = "${var.project_name}-cloudflare-tunnel-token"
+  }
+}
