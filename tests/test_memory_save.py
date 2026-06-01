@@ -91,7 +91,8 @@ async def test_persist_memories_dedup_skips_duplicate_on_high_similarity():
     db = _mock_db()
     db.execute.return_value = fake_result
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [unit_vector]
 
         count = await persist_memories(
@@ -123,7 +124,8 @@ async def test_persist_memories_dedup_inserts_when_low_similarity():
     db = _mock_db()
     db.execute.return_value = fake_result
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [vector_a]
 
         count = await persist_memories(
@@ -169,7 +171,8 @@ async def test_search_memories_sql_restricts_to_context_category():
     db = _mock_db()
     db.execute = AsyncMock(side_effect=fake_execute)
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [[0.0] * 1536]
         await search_memories(db=db, user_id="u1", query="anything")
 
@@ -190,7 +193,8 @@ async def test_search_memories_returns_only_context_rows_with_shape():
     result.fetchall.return_value = [_row("m3", "context", "User is working on project X.", 0.91)]
     db.execute = AsyncMock(return_value=result)
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [[0.0] * 1536]
         out = await search_memories(db=db, user_id="u1", query="project")
 
@@ -210,7 +214,8 @@ async def test_search_memories_returns_empty_list_when_no_context_memories():
     result.fetchall.return_value = []
     db.execute = AsyncMock(return_value=result)
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [[0.0] * 1536]
         out = await search_memories(db=db, user_id="u1", query="anything")
 
