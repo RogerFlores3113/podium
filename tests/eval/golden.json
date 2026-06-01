@@ -1,0 +1,74 @@
+[
+  {
+    "query": "Who has experience building Python backend APIs?",
+    "relevant_ids": ["resume-backend-python"]
+  },
+  {
+    "query": "Find a candidate strong in React and TypeScript front-end work",
+    "relevant_ids": ["resume-frontend-react"]
+  },
+  {
+    "query": "Looking for a machine learning and NLP expert",
+    "relevant_ids": ["resume-data-scientist"]
+  },
+  {
+    "query": "Who knows Kubernetes and Terraform for infrastructure?",
+    "relevant_ids": ["resume-devops-kubernetes"]
+  },
+  {
+    "query": "Candidate with product roadmap and user research skills",
+    "relevant_ids": ["resume-product-manager"]
+  },
+  {
+    "query": "Entry level new grad for a junior developer position",
+    "relevant_ids": ["resume-new-grad-cs"]
+  },
+  {
+    "query": "What does the senior backend engineer job require?",
+    "relevant_ids": ["jd-senior-backend"]
+  },
+  {
+    "query": "Describe the open frontend engineer role",
+    "relevant_ids": ["jd-frontend-react"]
+  },
+  {
+    "query": "Job posting for an ML engineer who productionizes models",
+    "relevant_ids": ["jd-ml-engineer"]
+  },
+  {
+    "query": "Is there a people-management leadership role open?",
+    "relevant_ids": ["jd-engineering-manager"]
+  },
+  {
+    "query": "How many stock options are in the offer and how do they vest?",
+    "relevant_ids": ["offer-equity-terms"]
+  },
+  {
+    "query": "What is the base salary and bonus in the offer letter?",
+    "relevant_ids": ["offer-base-salary"]
+  },
+  {
+    "query": "Tell me about the health benefits and PTO policy",
+    "relevant_ids": ["offer-benefits-pto"]
+  },
+  {
+    "query": "When is the start date and what are the contingencies?",
+    "relevant_ids": ["offer-start-date"]
+  },
+  {
+    "query": "Did we reach out to any passive candidates on LinkedIn?",
+    "relevant_ids": ["sourcing-note-passive-candidate"]
+  },
+  {
+    "query": "Any employee referrals for the data team?",
+    "relevant_ids": ["sourcing-note-referral"]
+  },
+  {
+    "query": "Show me everything related to the compensation offer package",
+    "relevant_ids": ["offer-equity-terms", "offer-base-salary", "offer-benefits-pto"]
+  },
+  {
+    "query": "Find backend Python engineers, candidates or open roles",
+    "relevant_ids": ["resume-backend-python", "jd-senior-backend"]
+  }
+]

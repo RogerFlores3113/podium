@@ -1,0 +1,66 @@
+[
+  {
+    "id": "resume-backend-python",
+    "text": "Senior backend engineer with 8 years building Python services. Designed FastAPI and Django REST APIs, async SQLAlchemy data layers, and PostgreSQL schemas serving millions of requests per day."
+  },
+  {
+    "id": "resume-frontend-react",
+    "text": "Frontend engineer specializing in React, TypeScript, and Next.js. Built component libraries, accessible design systems, and performant single-page apps with server-side rendering."
+  },
+  {
+    "id": "resume-data-scientist",
+    "text": "Data scientist with a PhD in statistics. Experienced in machine learning, NLP, and building recommendation models with PyTorch and scikit-learn, deployed behind production inference APIs."
+  },
+  {
+    "id": "resume-devops-kubernetes",
+    "text": "DevOps engineer focused on Kubernetes, Terraform, and CI/CD pipelines. Managed AWS infrastructure, container orchestration, autoscaling, and observability with Prometheus and Grafana."
+  },
+  {
+    "id": "resume-product-manager",
+    "text": "Product manager who led cross-functional teams shipping B2B SaaS features. Skilled at roadmap prioritization, user research, A/B experimentation, and stakeholder communication."
+  },
+  {
+    "id": "resume-new-grad-cs",
+    "text": "Recent computer science graduate seeking a junior software role. Internship experience in Java and Spring Boot, strong fundamentals in data structures, algorithms, and unit testing."
+  },
+  {
+    "id": "jd-senior-backend",
+    "text": "We are hiring a Senior Backend Engineer to own our Python microservices. You will design APIs, optimize database queries, and mentor junior engineers. FastAPI and PostgreSQL experience required."
+  },
+  {
+    "id": "jd-frontend-react",
+    "text": "Open role: Frontend Engineer. Build delightful user interfaces in React and TypeScript, collaborate with designers, and improve page-load performance. Five years of web experience expected."
+  },
+  {
+    "id": "jd-ml-engineer",
+    "text": "Machine Learning Engineer wanted to productionize models. Responsibilities include training pipelines, feature engineering, model serving, and monitoring drift. PyTorch and Python proficiency required."
+  },
+  {
+    "id": "jd-engineering-manager",
+    "text": "Engineering Manager opening to lead a team of eight. Drive technical strategy, run one-on-ones, grow careers, and partner with product on delivery. Prior people-management experience required."
+  },
+  {
+    "id": "offer-equity-terms",
+    "text": "Your offer includes 12,000 incentive stock options vesting over four years with a one-year cliff. Equity is granted at the fair market value set by the most recent 409A valuation."
+  },
+  {
+    "id": "offer-base-salary",
+    "text": "We are pleased to offer a base salary of 165,000 dollars per year, paid semi-monthly, plus an annual performance bonus targeted at 15 percent of base."
+  },
+  {
+    "id": "offer-benefits-pto",
+    "text": "Benefits include fully paid medical, dental, and vision coverage, a 401k with company match, and a flexible unlimited paid-time-off policy with a minimum two-week expectation."
+  },
+  {
+    "id": "offer-start-date",
+    "text": "Your anticipated start date is March 3rd. This offer is contingent on completion of a background check and verification of your eligibility to work in the United States."
+  },
+  {
+    "id": "sourcing-note-passive-candidate",
+    "text": "Sourcing note: reached out to a passive candidate on LinkedIn who is a staff engineer at a fintech startup. Not actively looking but open to a conversation about compensation and remote work."
+  },
+  {
+    "id": "sourcing-note-referral",
+    "text": "Sourcing note: strong employee referral for the data team. The referrer worked with this candidate at a previous company and vouches for their SQL and dashboarding skills."
+  }
+]
