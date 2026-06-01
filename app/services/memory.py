@@ -243,6 +243,7 @@ async def search_memories(
             FROM memories
             WHERE user_id = :user_id
               AND is_active = true
+              AND category = 'context'
             ORDER BY embedding <=> :embedding
             LIMIT :top_k
         """),
