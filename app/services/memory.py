@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Memory, Message
 from app.services.ingestion import generate_embeddings
+from app.services.llm import get_user_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,8 @@ async def persist_memories(
         return 0
 
     contents = [m["content"] for m in memories]
-    embeddings = await generate_embeddings(contents)
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings(contents, api_key=api_key)
 
     count = 0
     for mem_data, embedding in zip(memories, embeddings):
@@ -238,7 +240,8 @@ async def search_memories(
     """Semantic search over a user's memories. Used by the memory_search tool."""
     top_k = top_k or settings.memory_retrieval_top_k
 
-    embeddings = await generate_embeddings([query])
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings([query], api_key=api_key)
     query_embedding = embeddings[0]
 
     result = await db.execute(

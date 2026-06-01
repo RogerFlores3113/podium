@@ -10,6 +10,7 @@ from app.auth import get_current_user_id
 from app.models import Memory
 from app.schemas import MemoryResponse, MemoryCreate, MemoryUpdate
 from app.services.ingestion import generate_embeddings
+from app.services.llm import get_user_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,8 @@ async def create_memory(
     if not request.content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
-    embeddings = await generate_embeddings([request.content])
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings([request.content], api_key=api_key)
     memory = Memory(
         user_id=user_id,
         category=request.category,
@@ -86,7 +88,8 @@ async def update_memory(
     if not request.content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
-    embeddings = await generate_embeddings([request.content])
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings([request.content], api_key=api_key)
     memory.content = request.content.strip()
     memory.embedding = embeddings[0]
     memory.edited_by_user = True

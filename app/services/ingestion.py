@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Document, Chunk
+from app.services.llm import get_user_api_key
 from app.services.storage import get_local_path
 
 
@@ -103,17 +104,22 @@ def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     return [c.strip() for c in chunks if c.strip()]
 
 
-async def generate_embeddings(texts: list[str]) -> list[list[float]]:
+async def generate_embeddings(
+    texts: list[str], api_key: str | None = None
+) -> list[list[float]]:
     """
     Generate embeddings for a list of texts using litellm.
 
     litellm abstracts the provider — if you switch to Claude or a local
     model later, you change the model string and nothing else.
+
+    api_key: the user's OpenAI BYOK key when available; when None, the
+    system key (settings.openai_api_key) is used.
     """
     response = await aembedding(
         model=settings.embedding_model,
         input=texts,
-        api_key=settings.openai_api_key,
+        api_key=api_key or settings.openai_api_key,
     )
     return [item["embedding"] for item in response.data]
 
@@ -156,11 +162,12 @@ async def ingest_document(
     logger.info(f"Ingesting document: {filename} ({page_count} pages, {len(chunks)} chunks)")
 
     # 4. Embed (in batches to avoid API limits)
+    api_key = await get_user_api_key(db, user_id, "openai")
     batch_size = 100  # OpenAI allows up to 2048, but be conservative
     all_embeddings = []
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
-        embeddings = await generate_embeddings(batch)
+        embeddings = await generate_embeddings(batch, api_key=api_key)
         all_embeddings.extend(embeddings)
 
     # 5. Store chunks with embeddings
@@ -222,11 +229,12 @@ async def ingest_document_background(
     )
 
     # Embed in batches
+    api_key = await get_user_api_key(db, user_id, "openai")
     batch_size = 100
     all_embeddings = []
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
-        embeddings = await generate_embeddings(batch)
+        embeddings = await generate_embeddings(batch, api_key=api_key)
         all_embeddings.extend(embeddings)
 
     # Store chunks
