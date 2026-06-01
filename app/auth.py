@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models import User
+from app.services.guest_auth import _ALGORITHM, _guest_secret
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,15 @@ def verify_clerk_token(token: str) -> dict:
     )
 
 
+def verify_guest_token(token: str) -> dict:
+    """
+    Validate a guest HS256 JWT and return its claims.
+
+    Raises jwt.InvalidTokenError on failure.
+    """
+    return jwt.decode(token, _guest_secret(), algorithms=[_ALGORITHM])
+
+
 def verify_token(token: str) -> dict:
     """
     Verify either a Clerk JWT or a guest JWT and return its claims.
@@ -60,7 +70,6 @@ def verify_token(token: str) -> dict:
         pass
 
     try:
-        from app.services.guest_auth import verify_guest_token
         return verify_guest_token(token)
     except jwt.InvalidTokenError as e:
         logger.warning(f"Invalid token (both Clerk and guest failed): {e}")

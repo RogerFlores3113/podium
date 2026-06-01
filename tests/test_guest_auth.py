@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 
-from app.services.guest_auth import create_guest_user, verify_guest_token
+from app.auth import verify_guest_token
+from app.services.guest_auth import create_guest_user
 
 _SECRET = "test-secret-for-unit-tests-exactly-32b"
 _ALGORITHM = "HS256"
