@@ -19,8 +19,12 @@ a user and an AI assistant, extract durable, useful facts about the user that wo
 in future conversations.
 
 Output ONLY a JSON array of memory objects. Each object has:
-- category: "fact" (something objectively true about the user), "preference" (something \
-they like/dislike/prefer), or "context" (ongoing situations, projects, or plans)
+- category: one of three values, chosen by how durable the information is:
+  - "fact": a durable, always-relevant attribute of the user (objectively true about them).
+  - "preference": a durable like/dislike/preference of the user.
+  - "context": an ongoing situation, project, or plan — relevant now but not permanently.
+  "fact" and "preference" are always relevant and kept on hand; "context" is surfaced \
+only when the current conversation calls for it.
 - content: A concise first-person statement about the user, starting with "User ". \
 Be specific. Avoid duplicating information that is already generic knowledge.
 
