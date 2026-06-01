@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     memory_extraction_model: str = "gpt-4o-mini"
     memory_retrieval_top_k: int = 5
     memory_core_always_inject: int = 10
-    memory_extraction_delay: int = 60
+    memory_extraction_delay: int = 1800
 
     # Ollama — local/dev models; empty string = Ollama disabled
     ollama_base_url: str = ""  # e.g. http://localhost:11434
