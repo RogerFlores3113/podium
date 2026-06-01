@@ -7,7 +7,7 @@ from litellm import acompletion
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings, model_supports_tools
+from app.config import settings, model_supports_tools, provider_for_model
 from app.services.critic import _actor_critic, RESPONSES_API_MODELS
 from app.services.llm import normalize_ollama_url
 from app.tools import get_tool, get_tool_schemas
@@ -386,9 +386,14 @@ async def run_agent(
         if is_guest
         else all_schemas
     )
-    # Guests use gpt-5-nano by default; an explicit model override is respected
-    # so that callers (e.g. tests) can direct guests to a specific model.
-    resolved_model = (model or "gpt-5-nano") if is_guest else (model or settings.chat_model)
+    # Guests run under the system OpenAI key, so only OpenAI models are valid.
+    # An OpenAI model override is honored; any non-OpenAI model (e.g. claude-*)
+    # is coerced to gpt-5-nano to avoid sending the OpenAI key to another provider.
+    if is_guest:
+        candidate = model or "gpt-5-nano"
+        resolved_model = candidate if provider_for_model(candidate) == "openai" else "gpt-5-nano"
+    else:
+        resolved_model = model or settings.chat_model
     resolved_api_key = api_key or settings.openai_api_key
 
     # Dispatch to the Responses API loop for models that require it
