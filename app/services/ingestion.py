@@ -114,7 +114,15 @@ async def generate_embeddings(
     model later, you change the model string and nothing else.
 
     api_key: the user's OpenAI BYOK key when available; when None, the
-    system key (settings.openai_api_key) is used.
+    system key (settings.openai_api_key) is used as a fallback. The key is
+    never logged.
+
+    OpenAI-only constraint (SEC-01): embeddings use an OpenAI embedding
+    model, so only a user's *OpenAI* BYOK key can privatize their
+    embeddings. A user who has supplied only a non-OpenAI key, or a guest
+    with no key at all, resolves to None here and correctly falls back to
+    the system key — their content is embedded under the system account.
+    This is the honest, intended scope, not a regression.
     """
     response = await aembedding(
         model=settings.embedding_model,
