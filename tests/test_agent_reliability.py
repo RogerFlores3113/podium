@@ -645,3 +645,102 @@ async def test_litellm_balanced_effort_uses_1500_max_tokens():
     assert max_tokens_used == 1500, (
         f"effort='balanced' must use max_tokens=1500, got {max_tokens_used}"
     )
+
+
+# ---------------------------------------------------------------------------
+# AUTH-02: guest model coercion to a guest-safe (OpenAI) model
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_guest_non_openai_model_is_coerced_to_gpt_5_nano():
+    """A guest carrying a non-OpenAI model (claude-*) must be coerced to gpt-5-nano and never
+    dispatched to the Anthropic provider under the system OpenAI key (AUTH-02, T-18-05)."""
+    from app.services.agent import run_agent
+
+    responses_models = {}
+
+    async def fake_responses(db, user_id, input_messages, tools, api_key, model, is_guest, effort):
+        responses_models["model"] = model
+        yield {"type": "done"}
+
+    acompletion_called = MagicMock()
+
+    async def fake_acompletion(**kwargs):
+        acompletion_called(kwargs.get("model"))
+        return _make_async_stream([_make_text_chunk("Answer.")])
+
+    db = _mock_db()
+    with patch("app.services.agent._run_responses_agent", side_effect=fake_responses), \
+         patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        async for _ in run_agent(
+            db=db,
+            user_id="guest-u1",
+            user_message="hi",
+            conversation_history=[],
+            api_key="sk-test",
+            model="claude-sonnet-4-6",
+            is_guest=True,
+            effort="fast",
+        ):
+            pass
+
+    assert responses_models.get("model") == "gpt-5-nano", (
+        "Guest claude-* model must be coerced to gpt-5-nano (Responses API path)"
+    )
+    acompletion_called.assert_not_called()  # no Anthropic/acompletion dispatch
+
+
+@pytest.mark.asyncio
+async def test_guest_openai_model_override_is_honored():
+    """A guest carrying an OpenAI model (gpt-4o) must still be honored — test seam preserved (AUTH-02)."""
+    from app.services.agent import run_agent
+
+    dispatched = {}
+
+    async def fake_acompletion(**kwargs):
+        dispatched["model"] = kwargs.get("model")
+        return _make_async_stream([_make_text_chunk("Answer.")])
+
+    db = _mock_db()
+    with patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        async for _ in run_agent(
+            db=db,
+            user_id="guest-u1",
+            user_message="hi",
+            conversation_history=[],
+            api_key="sk-test",
+            model="gpt-4o",
+            is_guest=True,
+            effort="fast",
+        ):
+            pass
+
+    assert dispatched.get("model") == "gpt-4o", "Guest OpenAI model (gpt-4o) must not be coerced"
+
+
+@pytest.mark.asyncio
+async def test_non_guest_claude_model_is_not_coerced():
+    """A signed-in (non-guest) request keeps its claude model — coercion is guest-only (AUTH-02)."""
+    from app.services.agent import run_agent
+
+    dispatched = {}
+
+    async def fake_acompletion(**kwargs):
+        dispatched["model"] = kwargs.get("model")
+        return _make_async_stream([_make_text_chunk("Answer.")])
+
+    db = _mock_db()
+    with patch("app.services.agent.acompletion", side_effect=fake_acompletion):
+        async for _ in run_agent(
+            db=db,
+            user_id="u1",
+            user_message="hi",
+            conversation_history=[],
+            api_key="sk-test",
+            model="claude-sonnet-4-6",
+            is_guest=False,
+            effort="fast",
+        ):
+            pass
+
+    assert dispatched.get("model") == "claude-sonnet-4-6", "Non-guest claude model must not be coerced"

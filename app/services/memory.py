@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Memory, Message
 from app.services.ingestion import generate_embeddings
+from app.services.llm import get_user_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,12 @@ a user and an AI assistant, extract durable, useful facts about the user that wo
 in future conversations.
 
 Output ONLY a JSON array of memory objects. Each object has:
-- category: "fact" (something objectively true about the user), "preference" (something \
-they like/dislike/prefer), or "context" (ongoing situations, projects, or plans)
+- category: one of three values, chosen by how durable the information is:
+  - "fact": a durable, always-relevant attribute of the user (objectively true about them).
+  - "preference": a durable like/dislike/preference of the user.
+  - "context": an ongoing situation, project, or plan — relevant now but not permanently.
+  "fact" and "preference" are always relevant and kept on hand; "context" is surfaced \
+only when the current conversation calls for it.
 - content: A concise first-person statement about the user, starting with "User ". \
 Be specific. Avoid duplicating information that is already generic knowledge.
 
@@ -159,7 +164,8 @@ async def persist_memories(
         return 0
 
     contents = [m["content"] for m in memories]
-    embeddings = await generate_embeddings(contents)
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings(contents, api_key=api_key)
 
     count = 0
     for mem_data, embedding in zip(memories, embeddings):
@@ -234,7 +240,8 @@ async def search_memories(
     """Semantic search over a user's memories. Used by the memory_search tool."""
     top_k = top_k or settings.memory_retrieval_top_k
 
-    embeddings = await generate_embeddings([query])
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings([query], api_key=api_key)
     query_embedding = embeddings[0]
 
     result = await db.execute(
@@ -243,6 +250,7 @@ async def search_memories(
             FROM memories
             WHERE user_id = :user_id
               AND is_active = true
+              AND category = 'context'
             ORDER BY embedding <=> :embedding
             LIMIT :top_k
         """),

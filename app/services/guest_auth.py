@@ -47,12 +47,3 @@ async def create_guest_user(db: AsyncSession) -> tuple[User, str]:
     token = jwt.encode(payload, _guest_secret(), algorithm=_ALGORITHM)
     logger.info(f"Created guest user: {guest_clerk_id}")
     return user, token
-
-
-def verify_guest_token(token: str) -> dict:
-    """
-    Validate a guest HS256 JWT and return its claims.
-
-    Raises jwt.InvalidTokenError on failure.
-    """
-    return jwt.decode(token, _guest_secret(), algorithms=[_ALGORITHM])

@@ -91,7 +91,8 @@ async def test_persist_memories_dedup_skips_duplicate_on_high_similarity():
     db = _mock_db()
     db.execute.return_value = fake_result
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [unit_vector]
 
         count = await persist_memories(
@@ -123,7 +124,8 @@ async def test_persist_memories_dedup_inserts_when_low_similarity():
     db = _mock_db()
     db.execute.return_value = fake_result
 
-    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed:
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
         mock_embed.return_value = [vector_a]
 
         count = await persist_memories(
@@ -136,3 +138,85 @@ async def test_persist_memories_dedup_inserts_when_low_similarity():
     # Low similarity → should insert
     db.add.assert_called_once()
     assert count == 1, f"Expected 1 memory saved (different content), got {count}"
+
+
+# ---------------------------------------------------------------------------
+# MEM-02: search_memories returns only context-category memories
+# ---------------------------------------------------------------------------
+
+def _row(rid, category, content, similarity):
+    """A stand-in for a DB row returned by search_memories' SQL."""
+    r = MagicMock()
+    r.id = rid
+    r.category = category
+    r.content = content
+    r.similarity = similarity
+    return r
+
+
+@pytest.mark.asyncio
+async def test_search_memories_sql_restricts_to_context_category():
+    """search_memories' SQL must filter to category = 'context' so facts/preferences
+    (already always-injected by retrieve_core_memories) are not double-served (MEM-02)."""
+    from app.services.memory import search_memories
+
+    captured = {}
+
+    async def fake_execute(stmt, params=None):
+        captured["sql"] = str(stmt)
+        result = MagicMock()
+        result.fetchall.return_value = []
+        return result
+
+    db = _mock_db()
+    db.execute = AsyncMock(side_effect=fake_execute)
+
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
+        mock_embed.return_value = [[0.0] * 1536]
+        await search_memories(db=db, user_id="u1", query="anything")
+
+    sql = captured["sql"].lower()
+    assert "category = 'context'" in sql or "not in ('fact'" in sql, (
+        "search_memories SQL must restrict results to the context category"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_memories_returns_only_context_rows_with_shape():
+    """Given DB rows the SQL would have already filtered to context, search_memories
+    returns dicts with the unchanged shape (id, category, content, similarity)."""
+    from app.services.memory import search_memories
+
+    db = _mock_db()
+    result = MagicMock()
+    result.fetchall.return_value = [_row("m3", "context", "User is working on project X.", 0.91)]
+    db.execute = AsyncMock(return_value=result)
+
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
+        mock_embed.return_value = [[0.0] * 1536]
+        out = await search_memories(db=db, user_id="u1", query="project")
+
+    assert all(m["category"] == "context" for m in out)
+    assert out == [
+        {"id": "m3", "category": "context", "content": "User is working on project X.", "similarity": 0.91}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_memories_returns_empty_list_when_no_context_memories():
+    """A user with only fact/preference memories yields an empty list, not an error (MEM-02 edge case)."""
+    from app.services.memory import search_memories
+
+    db = _mock_db()
+    result = MagicMock()
+    result.fetchall.return_value = []
+    db.execute = AsyncMock(return_value=result)
+
+    with patch("app.services.memory.generate_embeddings", new_callable=AsyncMock) as mock_embed, \
+            patch("app.services.memory.get_user_api_key", new_callable=AsyncMock, return_value=None):
+        mock_embed.return_value = [[0.0] * 1536]
+        out = await search_memories(db=db, user_id="u1", query="anything")
+
+    assert out == []

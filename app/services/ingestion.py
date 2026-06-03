@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import logging
 
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Document, Chunk
+from app.services.llm import get_user_api_key
 from app.services.storage import get_local_path
 
 
@@ -27,36 +29,105 @@ def extract_text_from_pdf(file_path: str) -> tuple[str, int]:
     return text.strip(), page_count
 
 
+# Split a paragraph into sentences, keeping the terminator attached to each
+# sentence. Trailing text without a terminator is captured as a final sentence.
+_SENTENCE_RE = re.compile(r"\S.*?[.!?](?=\s|$)|\S.*?$", re.DOTALL)
+
+
+def _split_sentences(paragraph: str) -> list[str]:
+    """Split a paragraph into sentences (terminator kept on the sentence)."""
+    return [m.group().strip() for m in _SENTENCE_RE.finditer(paragraph) if m.group().strip()]
+
+
+def _hard_split(sentence: str, chunk_size: int) -> list[str]:
+    """Hard-split an oversize sentence on character count so chunking terminates."""
+    return [sentence[i : i + chunk_size] for i in range(0, len(sentence), chunk_size)]
+
+
 def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     """
-    Split text into overlapping chunks by character count.
+    Split text into overlapping chunks on sentence/paragraph boundaries.
 
-    This is a naive implementation — it splits on character boundaries.
-    A better approach (deferred) would split on token count or semantic
-    boundaries (paragraphs, sentences). Good enough for v0.
+    Text is split into paragraphs (blank lines), then sentences. Sentences are
+    greedily packed into chunks up to chunk_size characters; each new chunk is
+    seeded with whole trailing sentences from the previous chunk totalling about
+    `overlap` characters, so chunks overlap without cutting mid-sentence. A
+    single sentence longer than chunk_size is hard-split on character count
+    (the only case where a chunk is cut mid-sentence), guaranteeing termination.
     """
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        if chunk.strip():  # Skip empty chunks
-            chunks.append(chunk.strip())
-        start = end - overlap
-    return chunks
+    # Flatten paragraphs into an ordered list of sentences.
+    sentences: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        sentences.extend(_split_sentences(paragraph))
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0  # length of " ".join(current)
+
+    def flush() -> list[str]:
+        """Emit the current chunk and return the whole-sentence overlap seed."""
+        if not current:
+            return []
+        chunks.append(" ".join(current))
+        # Carry whole trailing sentences totalling ~overlap chars into next chunk.
+        seed: list[str] = []
+        seed_len = 0
+        for sentence in reversed(current):
+            added = len(sentence) + (1 if seed else 0)
+            if seed and seed_len + added > overlap:
+                break
+            seed.insert(0, sentence)
+            seed_len += added
+        return seed
+
+    for sentence in sentences:
+        if len(sentence) > chunk_size:
+            # Oversize sentence: flush what we have, then hard-split it. No
+            # overlap is carried across a hard-split boundary.
+            flush()
+            chunks.extend(_hard_split(sentence, chunk_size))
+            current, current_len = [], 0
+            continue
+
+        addition = len(sentence) + (1 if current else 0)
+        if current and current_len + addition > chunk_size:
+            current = flush()
+            current_len = len(" ".join(current))
+            addition = len(sentence) + (1 if current else 0)
+
+        current.append(sentence)
+        current_len += addition
+
+    if current:
+        chunks.append(" ".join(current))
+
+    return [c.strip() for c in chunks if c.strip()]
 
 
-async def generate_embeddings(texts: list[str]) -> list[list[float]]:
+async def generate_embeddings(
+    texts: list[str], api_key: str | None = None
+) -> list[list[float]]:
     """
     Generate embeddings for a list of texts using litellm.
 
     litellm abstracts the provider — if you switch to Claude or a local
     model later, you change the model string and nothing else.
+
+    api_key: the user's OpenAI BYOK key when available; when None, the
+    system key (settings.openai_api_key) is used as a fallback. The key is
+    never logged.
+
+    OpenAI-only constraint (SEC-01): embeddings use an OpenAI embedding
+    model, so only a user's *OpenAI* BYOK key can privatize their
+    embeddings. A user who has supplied only a non-OpenAI key, or a guest
+    with no key at all, resolves to None here and correctly falls back to
+    the system key — their content is embedded under the system account.
+    This is the honest, intended scope, not a regression.
     """
     response = await aembedding(
         model=settings.embedding_model,
         input=texts,
-        api_key=settings.openai_api_key,
+        api_key=api_key or settings.openai_api_key,
     )
     return [item["embedding"] for item in response.data]
 
@@ -99,11 +170,12 @@ async def ingest_document(
     logger.info(f"Ingesting document: {filename} ({page_count} pages, {len(chunks)} chunks)")
 
     # 4. Embed (in batches to avoid API limits)
+    api_key = await get_user_api_key(db, user_id, "openai")
     batch_size = 100  # OpenAI allows up to 2048, but be conservative
     all_embeddings = []
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
-        embeddings = await generate_embeddings(batch)
+        embeddings = await generate_embeddings(batch, api_key=api_key)
         all_embeddings.extend(embeddings)
 
     # 5. Store chunks with embeddings
@@ -165,11 +237,12 @@ async def ingest_document_background(
     )
 
     # Embed in batches
+    api_key = await get_user_api_key(db, user_id, "openai")
     batch_size = 100
     all_embeddings = []
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
-        embeddings = await generate_embeddings(batch)
+        embeddings = await generate_embeddings(batch, api_key=api_key)
         all_embeddings.extend(embeddings)
 
     # Store chunks

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.ingestion import generate_embeddings
+from app.services.llm import get_user_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,8 @@ async def retrieve_relevant_chunks(
     """
     top_k = top_k or settings.retrieval_top_k
 
-    embeddings = await generate_embeddings([query])
+    api_key = await get_user_api_key(db, user_id, "openai")
+    embeddings = await generate_embeddings([query], api_key=api_key)
     query_embedding = embeddings[0]
 
     if include_seed:
